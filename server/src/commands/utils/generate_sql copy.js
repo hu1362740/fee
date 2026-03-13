@@ -4,7 +4,6 @@ import _ from 'lodash'
 import DATE_FORMAT from '~/src/constants/date_format'
 
 const SQL_DATE_FORMAT_YM = 'YYYYMM'
-const PROJECT_ID_SEPARATOR = '_' 
 
 // 不需要分表
 const SINGLE_T_O_PROJECT = 't_o_project' //  项目表
@@ -386,39 +385,36 @@ TABLE_TEMPLATE[SINGLE_T_O_NEW_USER_SUMMARY] = `(
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='新用户统计表, 不分表';
 `
 
-function generate(baseTableName, projectIdList = [], tableTime = '') {
+function generate (baseTableName, projectId = '', tableTime = '') {
+  // 获取模板
   let content = TABLE_TEMPLATE[baseTableName]
 
-  let projectIdStr = ''
-  if (Array.isArray(projectIdList) && projectIdList.length > 0) {
-    projectIdStr = projectIdList.join(PROJECT_ID_SEPARATOR)
-  }
-
+  // 生成表名
   let fininalTableName = `${baseTableName}`
   switch (baseTableName) {
     case MUILT_T_O_MONITOR:
-      fininalTableName = `${fininalTableName}_${projectIdStr}_${tableTime}`
+      fininalTableName = `${fininalTableName}_${projectId}_${tableTime}`
       break
     case MUILT_T_O_MONITOR_EXT:
-      fininalTableName = `${fininalTableName}_${projectIdStr}_${tableTime}`
+      fininalTableName = `${fininalTableName}_${projectId}_${tableTime}`
       break
     case MUILT_T_O_UV_RECORD:
-      fininalTableName = `${fininalTableName}_${projectIdStr}_${tableTime}`
+      fininalTableName = `${fininalTableName}_${projectId}_${tableTime}`
       break
     case MUILT_T_R_CITY_DISTRIBUTION:
-      fininalTableName = `${fininalTableName}_${projectIdStr}_${tableTime}`
+      fininalTableName = `${fininalTableName}_${projectId}_${tableTime}`
       break
     case MUILT_T_R_PERFORMANCE:
-      fininalTableName = `${fininalTableName}_${projectIdStr}_${tableTime}`
+      fininalTableName = `${fininalTableName}_${projectId}_${tableTime}`
       break
     case MUILT_T_O_SYSTEM_COLLECTION:
-      fininalTableName = `${fininalTableName}_${projectIdStr}`
+      fininalTableName = `${fininalTableName}_${projectId}`
       break
     case MUILT_T_O_USER_FIRST_LOGIN_AT:
-      fininalTableName = `${fininalTableName}_${projectIdStr}`
+      fininalTableName = `${fininalTableName}_${projectId}`
       break
     case MUILT_T_R_ERROR_SUMMARY:
-      fininalTableName = `${fininalTableName}_${projectIdStr}_${tableTime}`
+      fininalTableName = `${fininalTableName}_${projectId}_${tableTime}`
       break
     default:
   }
@@ -429,7 +425,7 @@ CREATE TABLE  IF NOT EXISTS  \`${fininalTableName}\` ${content}
 }
 
 class GenerateSQL extends Base {
-  static get signature() {
+  static get signature () {
     return `
        Utils:GenerateSQL
        {projectIdList:项目id列表,逗号分割}
@@ -438,14 +434,13 @@ class GenerateSQL extends Base {
        `
   }
 
-  static get description() {
+  static get description () {
     return '生成项目在指定日期范围内的建表SQL'
   }
 
-  async execute(args, options) {
+  async execute (args, options) {
     let { projectIdList, startAtYm, finishAtYm } = args
-    // 确保正确分割项目ID列表，处理可能的空格
-    projectIdList = projectIdList.split(',').map(id => id.trim()).filter(id => id)
+    projectIdList = projectIdList.split(',')
     if (_.isEmpty(projectIdList)) {
       this.warn('自动退出:projectIdList为空 =>', projectIdList)
       return false
@@ -523,7 +518,7 @@ SET foreign_key_checks = 0;
           MUILT_T_O_USER_FIRST_LOGIN_AT,
           MUILT_T_R_ERROR_SUMMARY
         ]) {
-          let content = generate(tableName, [projectId], curremtAtYM)
+          let content = generate(tableName, projectId, curremtAtYM)
           sqlContent = `${sqlContent}\n${content}`
         }
       }
@@ -531,11 +526,7 @@ SET foreign_key_checks = 0;
 
     let insertProjectInfo = ``
 
-    let fullContent = `${commonSqlContent}\n${sqlContent}\n${insertProjectInfo}\n`
-    
-    let bom = '\uFEFF'
-    
-    this.log(`${bom}${fullContent}`)
+    this.log(`${commonSqlContent}\n${sqlContent}\n${insertProjectInfo}\n`)
   }
 
   /**
@@ -543,7 +534,7 @@ SET foreign_key_checks = 0;
    * @param {*} args
    * @param {*} options
    */
-  async handle(args, options) {
+  async handle (args, options) {
     await this.execute(args, options).catch(e => {
       this.log('catch error')
       this.log(e.stack)
@@ -555,7 +546,7 @@ SET foreign_key_checks = 0;
    * @param {*} args
    * @param {*} options
    */
-  async log(message) {
+  async log (message) {
     console.log(message)
   }
 }

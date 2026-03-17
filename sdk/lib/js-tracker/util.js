@@ -3,11 +3,10 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.debounce = debounce;
-exports.merge = merge;
-exports.isFunction = isFunction;
 exports.arrayFrom = arrayFrom;
-
+exports.debounce = debounce;
+exports.isFunction = isFunction;
+exports.merge = merge;
 /**
  * debounce
  *
@@ -29,6 +28,7 @@ function debounce(func, delay, callback) {
     }, delay);
   };
 }
+
 /**
  * merge
  *
@@ -36,34 +36,29 @@ function debounce(func, delay, callback) {
  * @param  {Object} dest
  * @return {Object}
  */
-
-
 function merge(src, dest) {
   for (var item in src) {
     dest[item] = src[item];
   }
-
   return dest;
 }
+
 /**
  * 是否是函数
  *
  * @param  {Any} func 判断对象
  * @return {Boolean}
  */
-
-
 function isFunction(func) {
   return Object.prototype.toString.call(func) === '[object Function]';
 }
+
 /**
  * 将类数组转化成数组
  *
  * @param  {Object} arrayLike 类数组对象
  * @return {Array} 转化后的数组
  */
-
-
 function arrayFrom(arrayLike) {
   return [].slice.call(arrayLike);
 }

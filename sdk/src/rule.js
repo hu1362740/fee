@@ -4,9 +4,9 @@
 const CODE_DETAIL_RULE = []
 
 CODE_DETAIL_RULE[1] = {
-  df: ['url', 'http_code', 'during_ms', 'size'],
-  ef: ['params', 'response'],
-  dft: {
+  df: ['url', 'http_code', 'during_ms', 'size'],  // 必填字段 (detail field)
+  ef: ['params', 'response'],                      // 选填字段 (extra field)
+  dft: {                                           // 字段转换 (detail field transfer)
     'size': 'response_size_b'
   }
 }

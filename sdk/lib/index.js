@@ -16,7 +16,9 @@ _.has = _lodashEs.has;
 _.clone = _lodashEs.clone;
 _.isFunction = _lodashEs.isFunction;
 _.merge = _lodashEs.merge;
-const feeTarget = 'https://test.com/dig'; // 打点服务器，或Nginx地址
+
+// const feeTarget = 'https://test.com/dig' // 打点服务器，或Nginx地址
+const feeTarget = 'http://test.com/dig'; // 打点服务器，或Nginx地址
 
 // pid string 工程id:platfe_saas
 // uuid string 用户信息

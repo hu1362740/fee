@@ -11,7 +11,8 @@ _.clone = clone
 _.isFunction = isFunction
 _.merge = merge
 
-const feeTarget = 'https://test.com/dig' // 打点服务器，或Nginx地址
+// const feeTarget = 'https://test.com/dig' // 打点服务器，或Nginx地址
+const feeTarget = 'http://test.com/dig' // 打点服务器，或Nginx地址
 
 // pid string 工程id:platfe_saas
 // uuid string 用户信息

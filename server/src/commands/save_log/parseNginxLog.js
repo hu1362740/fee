@@ -7,17 +7,17 @@ import SaveLogBase from '~/src/commands/save_log/base'
 import LKafka from '~/src/library/kafka'
 
 class NginxParseLog extends SaveLogBase {
-  static get signature () {
+  static get signature() {
     return `
      SaveLog:Nginx 
      `
   }
 
-  static get description () {
+  static get description() {
     return '每一分钟读取Nginx日志文件，并解析'
   }
 
-  async execute (args, options) {
+  async execute(args, options) {
     let that = this
     // 获取项目列表
     let projectMap = await this.getProjectMap()
@@ -25,6 +25,7 @@ class NginxParseLog extends SaveLogBase {
     let logCounter = 0
     let legalLogCounter = 0
     let nginxLogFilePath = commonConfig.nginxLogFilePath
+    // 每分钟读取一次 Nginx 日志文件
     let timeAt = moment().unix() - 60
     let timeMoment = moment.unix(timeAt)
     let formatStr = timeMoment.format('/YYYY/MM/DD/HH/mm')

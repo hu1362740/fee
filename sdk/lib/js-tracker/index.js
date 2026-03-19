@@ -33,14 +33,15 @@ var config = {
 };
 
 // 定义的错误类型码
-var ERROR_RUNTIME = 1;
-var ERROR_SCRIPT = 2;
-var ERROR_STYLE = 3;
-var ERROR_IMAGE = 4;
-var ERROR_AUDIO = 5;
-var ERROR_VIDEO = 6;
-var ERROR_CONSOLE = 7;
-var ERROR_TRY_CATHC = 8;
+var ERROR_RUNTIME = 1; // JS 运行时错误
+var ERROR_SCRIPT = 2; // JS 资源加载失败
+var ERROR_STYLE = 3; // CSS 资源加载失败
+var ERROR_IMAGE = 4; // 图片加载失败
+var ERROR_AUDIO = 5; // 音频加载失败
+var ERROR_VIDEO = 6; // 视频加载失败
+var ERROR_CONSOLE = 7; // console.error 捕获
+var ERROR_TRY_CATHC = 8; // try-catch 捕获的错误
+
 var LOAD_ERROR_TYPE = {
   SCRIPT: ERROR_SCRIPT,
   LINK: ERROR_STYLE,

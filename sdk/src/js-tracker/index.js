@@ -56,11 +56,20 @@ var LOAD_ERROR_TYPE = {
 /**
  * 配置合并与报告函数初始化
  * @param {Object} opts 用户配置
+ * 
+ * 【关键逻辑】：
+ * 1. merge(opts, config): 将用户传入的配置（包含 report 函数）合并到 config 对象中
+ *    此时 config.report 已经被赋值为 index.js 中传入的那个函数
+ * 2. debounce(...): 使用防抖函数包装 config.report
+ *    这意味着当错误频繁发生时，不会每次都立即调用，而是等待 delay 毫秒后统一调用一次
+ * 3. report = debounce(...): 将包装后的函数重新赋值给局部变量 report
+ *    后续 handleError 中调用的就是这个 report 变量
  */
 function __config (opts) {
   merge(opts, config)
 
   // 使用防抖函数包装报告方法，避免频繁上报
+  // 这里 config.report 就是 index.js 中传入的函数
   report = debounce(config.report, config.delay, function () {
     errorList = []
   })
@@ -158,6 +167,12 @@ function formatTryCatchError (error) {
  * 错误数据预处理
  *
  * @param  {Object} errorLog    错误日志
+ * 
+ * 【调用触发点】：
+ * 当 __init 中监听到 error 或 unhandledrejection 事件时，会调用 handleError
+ * handleError 根据 config.concat 决定调用方式：
+ * - 如果 concat 为 false: 直接调用 config.report([errorLog]) (即立即执行 index.js 中的 report)
+ * - 如果 concat 为 true:  pushError 存入队列，然后调用 report(errorList) (即执行防抖后的 index.js 中的 report)
  */
 function handleError (errorLog) {
   // 是否延时处理
@@ -167,6 +182,7 @@ function handleError (errorLog) {
   } else {
     // 合并模式：推入队列，触发防抖上报
     pushError(errorLog)
+    // 这里的 report 是经过 __config 处理过的，最终会执行 index.js 传入的回调
     report(errorList)
   }
 }

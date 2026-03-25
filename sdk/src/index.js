@@ -305,15 +305,24 @@ log.set = (customerConfig = {}, isOverwrite = false) => {
 }
 
 // 初始化 js-tracker 监控
+// 【调用链路说明】：
+// 1. 此处将 report 函数作为回调配置传递给 jstracker.init()
+// 2. jstracker 内部会将此函数保存，并在捕获到错误时触发调用
+// 3. 具体触发逻辑见 js-tracker/index.js 中的 __config 和 handleError 函数
 jstracker.init({
   concat: false,
+  /**
+   * 错误上报回调函数
+   * 当 jstracker 捕获到错误列表时，会自动调用此函数
+   * @param {Array} errorLogList - 捕获到的错误日志列表
+   */
   report: function (errorLogList = []) {
     // 检查是否开启 JS 错误监控
     const isJsErrorFlagOn = _.get(commonConfig, ['record', 'js_error'], _.get(DEFAULT_CONFIG, ['record', 'js_error']))
     const isOldJsErrorFlagOn = _.get(commonConfig, ['jserror'], false)
     const needRecordJsError = isJsErrorFlagOn || isOldJsErrorFlagOn
     if (needRecordJsError === false) {
-      debugLogger(`config.record.js_error为false, 跳过页面报错打点, 页面报错内容为 =>`, errorLogList)
+      debugLogger(`config.record.js_error为false, 跳过页面报错打点，页面报错内容为 =>`, errorLogList)
       return
     }
 
@@ -342,17 +351,17 @@ jstracker.init({
       try {
         isNeedReport = customerErrorCheckFunc(desc, stack)
       } catch (e) {
-        debugLogger(`config.record.js_error_report_config.checkErrrorNeedReport执行时发生异常, 请注意, 页面报错信息为=>`, { e, desc, stack })
+        debugLogger(`config.record.js_error_report_config.checkErrrorNeedReport 执行时发生异常，请注意，页面报错信息为=>`, { e, desc, stack })
         isNeedReport = true
       }
       if (isNeedReport === false) {
-        debugLogger(`config.record.js_error_report_config.checkErrrorNeedReport返回值为false, 跳过此类错误, 页面报错信息为=>`, { desc, stack })
+        debugLogger(`config.record.js_error_report_config.checkErrrorNeedReport 返回值为 false, 跳过此类错误，页面报错信息为=>`, { desc, stack })
         continue
       }
 
       let errorName = '页面报错_' + JS_TRACKER_ERROR_DISPLAY_MAP[type]
       let location = window.location
-      debugLogger('[自动]捕捉到页面错误, 发送打点数据, 上报内容 => ', {
+      debugLogger('[自动] 捕捉到页面错误，发送打点数据，上报内容 => ', {
         error_no: errorName,
         url: `${location.host}${location.pathname}`,
         desc,

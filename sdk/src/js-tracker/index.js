@@ -7,25 +7,31 @@ import {
 var monitor = {}
 monitor.tryJS = tryJS
 
+// 设置 try-catch 错误处理回调
 setting({ handleTryCatchError: handleTryCatchError })
 
+/**
+ * 初始化监控器
+ * @param {Object} opts 配置选项
+ */
 monitor.init = function (opts) {
   __config(opts)
   __init()
 }
 
-// 忽略错误监听
+// 忽略错误监听标记
 window.ignoreError = false
 // 错误日志列表
 var errorList = []
-// 错误处理回调
+// 错误处理回调，默认空函数
 var report = function () { }
 
+// 默认配置
 var config = {
-  concat: true,
-  delay: 2000, // 错误处理间隔时间
+  concat: true, // 是否合并错误上报
+  delay: 2000, // 错误处理间隔时间（ms）
   maxError: 16, // 异常报错数量限制
-  sampling: 1 // 采样率
+  sampling: 1 // 采样率（0-1）
 }
 
 // 定义的错误类型码
@@ -38,6 +44,7 @@ var ERROR_VIDEO = 6      // 视频加载失败
 var ERROR_CONSOLE = 7    // console.error 捕获
 var ERROR_TRY_CATHC = 8  // try-catch 捕获的错误
 
+// 资源加载错误类型映射
 var LOAD_ERROR_TYPE = {
   SCRIPT: ERROR_SCRIPT,
   LINK: ERROR_STYLE,
@@ -46,46 +53,43 @@ var LOAD_ERROR_TYPE = {
   VIDEO: ERROR_VIDEO
 }
 
+/**
+ * 配置合并与报告函数初始化
+ * @param {Object} opts 用户配置
+ */
 function __config (opts) {
   merge(opts, config)
 
+  // 使用防抖函数包装报告方法，避免频繁上报
   report = debounce(config.report, config.delay, function () {
     errorList = []
   })
 }
 
+/**
+ * 初始化错误监听
+ */
 function __init () {
-  // 监听 JavaScript 报错异常(JavaScript runtime error)
-  // window.onerror = function () {
-  //   if (window.ignoreError) {
-  //     window.ignoreError = false
-  //     return
-  //   }
-
-  //   handleError(formatRuntimerError.apply(null, arguments))
-  // }
-
-  // 监听资源加载错误(JavaScript Scource failed to load)
+  // 监听资源加载错误 (JavaScript Source failed to load)
   window.addEventListener('error', function (event) {
-    // 过滤 target 为 window 的异常，避免与上面的 onerror 重复
     var errorTarget = event.target
+    // 过滤 target 为 window 的异常，避免与下面的 runtime 错误重复
     if (errorTarget !== window && errorTarget.nodeName && LOAD_ERROR_TYPE[errorTarget.nodeName.toUpperCase()]) {
       handleError(formatLoadError(errorTarget))
     } else {
-      // onerror会被覆盖, 因此转为使用Listener进行监控
+      // onerror 会被覆盖，因此转为使用 Listener 进行监控
       let { message, filename, lineno, colno, error } = event
       handleError(formatRuntimerError(message, filename, lineno, colno, error))
     }
   }, true)
 
-  //监听开发中浏览器中捕获到未处理的Promise错误
+  // 监听未处理的 Promise 错误
   window.addEventListener('unhandledrejection', function (event) {
     console.log('Unhandled Rejection at:', event.promise, 'reason:', event.reason);
     handleError(event)
   }, true)
 
   // 针对 vue 报错重写 console.error
-  // TODO
   console.error = (function (origin) {
     return function (info) {
       var errorLog = {
@@ -112,7 +116,7 @@ function handleTryCatchError (error) {
  * @param  {Number} lineno  发生错误的行号
  * @param  {Number} colno   发生错误的列号
  * @param  {Object} error   error 对象
- * @return {Object}
+ * @return {Object} 格式化后的错误对象
  */
 function formatRuntimerError (message, source, lineno, colno, error) {
   return {
@@ -123,10 +127,10 @@ function formatRuntimerError (message, source, lineno, colno, error) {
 }
 
 /**
- * 生成 laod 错误日志
+ * 生成 load 错误日志
  *
- * @param  {Object} errorTarget
- * @return {Object}
+ * @param  {Object} errorTarget 出错 DOM 元素
+ * @return {Object} 格式化后的错误对象
  */
 function formatLoadError (errorTarget) {
   return {
@@ -158,8 +162,10 @@ function formatTryCatchError (error) {
 function handleError (errorLog) {
   // 是否延时处理
   if (!config.concat) {
+    // 非合并模式：根据采样率决定是否立即上报
     !needReport(config.sampling) || config.report([errorLog])
   } else {
+    // 合并模式：推入队列，触发防抖上报
     pushError(errorLog)
     report(errorList)
   }
@@ -180,7 +186,7 @@ function pushError (errorLog) {
  * 设置一个采样率，决定是否上报
  *
  * @param  {Number} sampling 0 - 1
- * @return {Boolean}
+ * @return {Boolean} 是否需要上报
  */
 function needReport (sampling) {
   return Math.random() < (sampling || 1)

@@ -3,7 +3,7 @@ import rule from './rule'
 import config from '../config'
 import { get, has, clone, isFunction, merge } from 'lodash-es'
 
-// 将loadsh的方法集中到_中
+// 将 lodash 的方法集中到_中，方便统一调用
 let _ = {}
 _.get = get
 _.has = has
@@ -23,12 +23,13 @@ const feeTarget = 'http://test.com/dig' // 打点服务器，或Nginx地址
 // 测试标记符
 const TEST_FLAG = 'b47ca710747e96f1c523ebab8022c19e9abaa56b'
 
+// 日志类型常量
 const LOG_TYPE_ERROR = 'error' // 错误日志
 const LOG_TYPE_PRODUCT = 'product' // 产品指标
 const LOG_TYPE_INFO = 'info' // 尚未使用
 const LOG_TYPE_PERFORMANCE = 'perf' // 性能指标
 
-// 定义JS_TRACKER错误类型码
+// 定义 JS_TRACKER 错误类型码映射
 const JS_TRACKER_ERROR_CONSTANT_MAP = {
   1: 'ERROR_RUNTIME',
   2: 'ERROR_SCRIPT',
@@ -40,6 +41,7 @@ const JS_TRACKER_ERROR_CONSTANT_MAP = {
   8: 'ERROR_TRY_CATCH'
 }
 
+// 定义 JS_TRACKER 错误展示名称映射
 const JS_TRACKER_ERROR_DISPLAY_MAP = {
   1: 'JS_RUNTIME_ERROR',
   2: 'SCRIPT_LOAD_ERROR',
@@ -51,7 +53,7 @@ const JS_TRACKER_ERROR_DISPLAY_MAP = {
   8: 'TRY_CATCH_ERROR'
 }
 
-// 默认配置
+// 默认配置项
 const DEFAULT_CONFIG = {
   pid: '', // [必填]项目id, 由灯塔项目组统一分配
   uuid: '', // [可选]设备唯一id, 用于计算uv数&设备分布. 一般在cookie中可以取到, 没有uuid可用设备mac/idfa/imei替代. 或者在storage的key中存入随机数字, 模拟设备唯一id.
@@ -94,25 +96,40 @@ const DEFAULT_CONFIG = {
   getPageType: (location = window.location) => { return `${location.host}${location.pathname}` }
 }
 
+// 当前生效的配置
 let commonConfig = _.clone(DEFAULT_CONFIG)
 
+/**
+ * 调试日志打印，仅在测试模式下生效
+ */
 function debugLogger () {
-  // 只有在测试时才打印log
   if (commonConfig.is_test) {
     console.info('dt:',...arguments)
   }
 }
 
+/**
+ * 控制台红色日志打印
+ */
 const clog = (text) => {
   console.log(`%c ${text}`, 'color:red')
 }
 
+/**
+ * 校验 log 参数合法性
+ * @param {String} type 日志类型
+ * @param {Number} code 错误码
+ * @param {Object} detail 消费数据
+ * @param {Object} extra 展示数据
+ * @returns {String} 错误消息，为空表示校验通过
+ */
 const validLog = (type = '', code, detail = {}, extra = {}) => {
   const pid = _.get(commonConfig, ['pid'], '')
   if (!pid) {
     return '请设置工程ID[pid]'
   }
 
+  // 校验 code 范围
   if (type === 'error') {
     if (code < 0 || code > 9999) {
       return 'type:error的log code 应该在1～9999之间'
@@ -127,16 +144,15 @@ const validLog = (type = '', code, detail = {}, extra = {}) => {
     }
   }
 
-  // 字端段类型校验
+  // 字段类型校验
   if (typeof detail !== 'object') {
     return 'second argument detail required object'
   }
-  // 字端段类型校验
   if (typeof extra !== 'object') {
     return 'third argument extra required object'
   }
 
-  // 字段校验
+  // 根据 rule 校验必填字段
   const ruleItem = rule[code]
   if (ruleItem) {
     // 消费字段必填
@@ -156,6 +172,12 @@ const validLog = (type = '', code, detail = {}, extra = {}) => {
   return ''
 }
 
+/**
+ * 根据 rule 配置转换 detail 字段名
+ * @param {Number} code 错误码
+ * @param {Object} detail 原始数据
+ * @returns {Object} 转换后的数据
+ */
 const detailAdapter = (code, detail = {}) => {
   const dbDetail = {
     error_no: '',
@@ -188,11 +210,11 @@ const detailAdapter = (code, detail = {}) => {
 }
 
 /**
- *
- * @param {类型} type
- * @param {code码} code
- * @param {消费数据} detail
- * @param {展示数据} extra
+ * 核心打点函数
+ * @param {String} type 类型
+ * @param {Number} code code 码
+ * @param {Object} detail 消费数据
+ * @param {Object} extra 展示数据
  */
 const log = (type = '', code, detail = {}, extra = {}) => {
   const errorMsg = validLog(type, code, detail, extra)
@@ -201,7 +223,7 @@ const log = (type = '', code, detail = {}, extra = {}) => {
     return errorMsg
   }
 
-  // 调用自定义函数, 计算pageType
+  // 获取页面类型解析函数
   let getPageTypeFunc = _.get(
     commonConfig,
     ['getPageType'],
@@ -216,6 +238,7 @@ const log = (type = '', code, detail = {}, extra = {}) => {
     pageType = `${location.host}${location.pathname}`
   }
 
+  // 组装日志信息
   const logInfo = {
     type,
     code,
@@ -229,29 +252,30 @@ const log = (type = '', code, detail = {}, extra = {}) => {
       page_type: pageType
     }
   }
-  // 图片打点
+  // 通过 Image 发送打点数据
   const img = new window.Image()
   img.src = `${feeTarget}?d=${encodeURIComponent(JSON.stringify(logInfo))}`
 }
 
+/**
+ * 设置配置项
+ * @param {Object} customerConfig 用户配置
+ * @param {Boolean} isOverwrite 是否覆盖原有配置
+ */
 log.set = (customerConfig = {}, isOverwrite = false) => {
-  // 覆盖模式
   if (isOverwrite) {
     commonConfig = { ...customerConfig }
   } else {
     // lodash内置函数, 相当于递归版assign
     commonConfig = _.merge(commonConfig, customerConfig)
   }
+
   // 检测是否为测试数据
-  const isTestFlagOn = _.get(
-    commonConfig,
-    ['is_test'],
-    _.get(DEFAULT_CONFIG, ['is_test'])
-  )
-  const isOldTestFlagOn = _.get(commonConfig, ['test'], false) // 兼容旧配置项
+  const isTestFlagOn = _.get(commonConfig, ['is_test'], _.get(DEFAULT_CONFIG, ['is_test']))
+  const isOldTestFlagOn = _.get(commonConfig, ['test'], false)
   const isTest = isTestFlagOn || isOldTestFlagOn
 
-  // 检测配置项
+  // 校验关键配置项
   const uuid = _.get(commonConfig, ['uuid'], '')
   if (uuid === '') {
     debugLogger('警告: 未设置uuid(设备唯一标识), 无法统计设备分布数等信息')
@@ -280,24 +304,23 @@ log.set = (customerConfig = {}, isOverwrite = false) => {
   }
 }
 
+// 初始化 js-tracker 监控
 jstracker.init({
   concat: false,
   report: function (errorLogList = []) {
-    const isJsErrorFlagOn = _.get(
-      commonConfig,
-      ['record', 'js_error'],
-      _.get(DEFAULT_CONFIG, ['record', 'js_error'])
-    )
+    // 检查是否开启 JS 错误监控
+    const isJsErrorFlagOn = _.get(commonConfig, ['record', 'js_error'], _.get(DEFAULT_CONFIG, ['record', 'js_error']))
     const isOldJsErrorFlagOn = _.get(commonConfig, ['jserror'], false)
     const needRecordJsError = isJsErrorFlagOn || isOldJsErrorFlagOn
     if (needRecordJsError === false) {
       debugLogger(`config.record.js_error为false, 跳过页面报错打点, 页面报错内容为 =>`, errorLogList)
       return
     }
+
     for (let errorLog of errorLogList) {
       const { type, desc, stack } = errorLog
 
-      // 检测该errorType是否需要记录
+      // 检测该 errorType 是否需要记录
       let strErrorType = _.get(JS_TRACKER_ERROR_CONSTANT_MAP, type, '')
       let isErrorTypeNeedRecord = _.get(
         commonConfig,
@@ -305,12 +328,11 @@ jstracker.init({
         _.get(DEFAULT_CONFIG, ['record', 'js_error_report_config', strErrorType])
       )
       if (isErrorTypeNeedRecord === false) {
-        // 主动配置了忽略该错误, 自动返回
-        debugLogger(`config.record.js_error_report_config.${strErrorType}值为false, 跳过类别为${strErrorType}的页面报错打点, 错误信息=>`, errorLog)
+        debugLogger(`config.record.js_error_report_config.${strErrorType}值为 false, 跳过类别为${strErrorType}的页面报错打点，错误信息=>`, errorLog)
         continue
       }
 
-      // 调用自定义函数, 检测是否需要上报错误
+      // 调用自定义函数，检测是否需要上报错误
       let customerErrorCheckFunc = _.get(
         commonConfig,
         ['record', 'js_error_report_config', 'checkErrrorNeedReport'],
@@ -329,7 +351,6 @@ jstracker.init({
       }
 
       let errorName = '页面报错_' + JS_TRACKER_ERROR_DISPLAY_MAP[type]
-
       let location = window.location
       debugLogger('[自动]捕捉到页面错误, 发送打点数据, 上报内容 => ', {
         error_no: errorName,
@@ -349,13 +370,9 @@ jstracker.init({
   }
 })
 
+// 页面加载完成后上报性能指标
 window.onload = () => {
-  // 检查是否监控性能指标
-  const isPerformanceFlagOn = _.get(
-    commonConfig,
-    ['record', 'performance'],
-    _.get(DEFAULT_CONFIG, ['record', 'performance'])
-  )
+  const isPerformanceFlagOn = _.get(commonConfig, ['record', 'performance'], _.get(DEFAULT_CONFIG, ['record', 'performance']))
   const isOldPerformanceFlagOn = _.get(commonConfig, ['performance'], false)
   const needRecordPerformance = isPerformanceFlagOn || isOldPerformanceFlagOn
   if (needRecordPerformance === false) {
@@ -365,7 +382,6 @@ window.onload = () => {
 
   const performance = window.performance
   if (!performance) {
-    // 当前浏览器不支持
     console.log('你的浏览器不支持 performance 接口')
     return
   }
@@ -382,18 +398,14 @@ window.onload = () => {
   })
 }
 
-// 用户在线时长统计
-const OFFLINE_MILL = 15 * 60 * 1000 // 15分钟不操作认为不在线
-const SEND_MILL = 5 * 1000 // 每5s打点一次
+// 用户在线时长统计常量
+const OFFLINE_MILL = 15 * 60 * 1000 // 15 分钟不操作认为不在线
+const SEND_MILL = 5 * 1000 // 每 5s 打点一次
 
 let lastTime = Date.now()
+// 监听点击事件，统计在线时长
 window.addEventListener('click', () => {
-  // 检查是否监控用户在线时长
-  const isTimeOnPageFlagOn = _.get(
-    commonConfig,
-    ['record', 'time_on_page'],
-    _.get(DEFAULT_CONFIG, ['record', 'time_on_page'])
-  )
+  const isTimeOnPageFlagOn = _.get(commonConfig, ['record', 'time_on_page'], _.get(DEFAULT_CONFIG, ['record', 'time_on_page']))
   const isOldTimeOnPageFlagOn = _.get(commonConfig, ['online'], false)
   const needRecordTimeOnPage = isTimeOnPageFlagOn || isOldTimeOnPageFlagOn
   if (needRecordTimeOnPage === false) {
@@ -427,7 +439,6 @@ window.addEventListener('click', () => {
  *                 => 其余字段会作为补充信息进行展示
  */
 function notify (errorName = '', url = '', extraInfo = {}) {
-  // 规范请求参数
   let detail = {}
   let extra = {}
   if (!errorName) {
@@ -438,7 +449,7 @@ function notify (errorName = '', url = '', extraInfo = {}) {
   detail['error_name'] = '' + errorName
   detail['url'] = '' + url
 
-  // 最大不能超过200字
+  // 长度截断保护
   if (detail['error_name'].length > 200) {
     detail['error_name'] = detail['error_name'].slice(0, 200)
     debugLogger('error_name长度不能超过200字符, 自动截断. 截断后为=>', detail['error_name'])
@@ -448,6 +459,7 @@ function notify (errorName = '', url = '', extraInfo = {}) {
     debugLogger('url长度不能超过200字符, 自动截断. 截断后为=>', detail['error_name'])
   }
 
+  // 整数字段转换
   for (let intKey of [
     'http_code',
     'during_ms',
@@ -501,9 +513,10 @@ function behavior (code = '', name = '', url = '') {
 }
 log.behavior = behavior
 
-// 注册项目名: dt => downtown
+// 注册全局变量 dt => downtown
 window.dt = log
 
+// 导出快捷方法
 export const Elog = log.error = (code, detail, extra) => {
   return log('error', code, detail, extra)
 }

@@ -102,7 +102,7 @@ function __init () {
     handleError(event)
   }, true)
 
-  // 针对 vue 报错重写 console.error
+  // 针对 vue、react 报错重写 console.error
   // 拦截 console.error 调用，将其视为一种错误类型进行上报
   console.error = (function (origin) {
     return function (info) {

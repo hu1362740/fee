@@ -119,6 +119,27 @@ class NginxParseLog extends SaveLogBase {
       next()
     }
 
+    // 【修复】返回 Promise，确保等待文件读取完成
+    // return new Promise((resolve, reject) => {
+    //   readLine(fs.createReadStream(logAbsolutePath)).go(
+    //     onDataIn,
+    //     async () => {
+    //       try {
+    //         that.log(`任务执行完毕，共处理 ${logCounter} 条日志，其中合法数据 ${legalLogCounter} 条`)
+
+    //         // 关闭所有写流
+    //         await this.autoCloseOldStream(true)
+
+    //         // 解决 Promise，标记成功
+    //         resolve()
+    //       } catch (error) {
+    //         that.log('完成回调中发生错误:', error)
+    //         reject(error)
+    //       }
+    //     }
+    //   )
+    // })
+
     readLine(fs.createReadStream(logAbsolutePath)).go(
       onDataIn,
       async () => {

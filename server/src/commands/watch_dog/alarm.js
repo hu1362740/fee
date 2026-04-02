@@ -99,7 +99,7 @@ class WatchAlarm extends Base {
       }
       let alarmMsg = `项目【${projectName}】监控的【${errorName}】错误，抽样比例【${projectRate}%】 最近【${timeRange}】秒内错误数【${errorCount}】, 达到阈值【${maxErrorCount}】,触发报警, 报警备注【${note}】。`
       this.log(alarmMsg)
-      await this.sendAlert(alarmUcidList, alarmMsg)
+      await this.sendAlert(alarmUcidList, alarmMsg)//企业微信推送 - 根据 UCID 发送给对应负责人
       const isSuccess = await MAlarmLog.insert(projectId, configId, nowAt, errorName, alarmMsg)
       if (isSuccess === false) {
         Logger.error('添加报警日志失败')

@@ -26,7 +26,7 @@ class SaveLogBase extends Base {
     return rawLogWriteStreamPool.size || 0
   }
 
-  isTestLog (content) {
+  isTestLog(content) {
     return content.includes(TEST_LOG_FLAG)
   }
 
@@ -35,7 +35,7 @@ class SaveLogBase extends Base {
    * @param {number} nowAt
    * @returns {WriteStream}
    */
-  getWriteStreamClientByType (nowAt, logType = LKafka.LOG_TYPE_RAW) {
+  getWriteStreamClientByType(nowAt, logType = LKafka.LOG_TYPE_RAW) {
     // 确保logType一定是指定类型
     switch (logType) {
       case LKafka.LOG_TYPE_RAW:
@@ -69,7 +69,7 @@ class SaveLogBase extends Base {
   /**
    * 自动关闭旧Stream
    */
-  autoCloseOldStream (isCloseAll = false) {
+  autoCloseOldStream(isCloseAll = false) {
     let nowAt = moment().unix()
     let startAt = nowAt - 60 * 10
     let finishAt = nowAt
@@ -117,7 +117,7 @@ class SaveLogBase extends Base {
    * 获取项目列表
    * @returns {object}
    */
-  async getProjectMap () {
+  async getProjectMap() {
     let projectList = await MProject.getList()
     let projectMap = {}
     for (let project of projectList) {
@@ -136,7 +136,7 @@ class SaveLogBase extends Base {
    * @param {String} data
    * @return {Number}
    */
-  parseLogCreateAt (data) {
+  parseLogCreateAt(data) {
     let nowAt = moment().unix()
     if (_.isString(data) === false) {
       return nowAt
@@ -173,7 +173,7 @@ class SaveLogBase extends Base {
    * @param {object} projectMap code => project_id格式的项目字典
    * @returns {object|null}
    */
-  async parseLog (data, projectMap) {
+  async parseLog(data, projectMap) {
     const info = data.split('\t')
     let url = _.get(info, [15], '')
 
@@ -213,8 +213,8 @@ class SaveLogBase extends Base {
     }
     record.project_id = projectMap[record.common.pid]['id']
     record.project_name = record.common.pid
-    let currentAt = moment().unix()
-    let logCreateAt = this.parseLogCreateAt(data)
+    let currentAt = moment().unix() // ← 当前服务器时间
+    let logCreateAt = this.parseLogCreateAt(data) // ← 日志中的时间
     // 如果入库时间距离现在大于10天, 则认为是不合法数据(kafka中只会存7天以内的数据, 入库时间超出上下10天, 都不正常)
     if (Math.abs(logCreateAt - currentAt) > 864000) {
       this.log('入库时间超出阈值, 自动跳过 finialTimeAt=>', logCreateAt)

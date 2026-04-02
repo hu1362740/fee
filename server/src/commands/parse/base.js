@@ -26,7 +26,7 @@ class ParseBase extends Base {
     this.DATE_FORMAT_DISPLAY = DATE_FORMAT.COMMAND_ARGUMENT_BY_MINUTE
   }
 
-  async execute (args, options) {
+  async execute(args, options) {
     let { startAtYmdHi, endAtYmdHi } = args
     if (this.isArgumentsLegal(args, options) === false) {
       this.warn('参数不正确, 自动退出')
@@ -50,7 +50,7 @@ class ParseBase extends Base {
    * @param {*} options
    * @return {Boolean}
    */
-  isArgumentsLegal (args, options) {
+  isArgumentsLegal(args, options) {
     let { startAtYmdHi, endAtYmdHi } = args
 
     let startAtMoment = moment(startAtYmdHi, DATE_FORMAT.COMMAND_ARGUMENT_BY_MINUTE)
@@ -82,7 +82,7 @@ class ParseBase extends Base {
    * @param {*} endAt
    * @return null
    */
-  async parseLog (startAt, endAt) {
+  async parseLog(startAt, endAt) {
     let that = this
     for (let currentAt = startAt; currentAt <= endAt; currentAt = currentAt + 60) {
       let currentAtMoment = moment.unix(currentAt)
@@ -124,7 +124,7 @@ class ParseBase extends Base {
    * @param {Object} record
    * @return {Boolean}
    */
-  isLegalRecord (record) {
+  isLegalRecord(record) {
     this.mustBeOverride()
     // let recordType = get(record, ['type'], '')
     // let code = get(record, ['code'], '')
@@ -165,7 +165,7 @@ class ParseBase extends Base {
    * {"type":"product","code":10001,"detail":{"duration_ms":30807},"extra":{},"common":{"pid":"platfe_saas","uuid":"d0511ce2-2482-4f7b-8f11-09ed75004963","ssid":"0c11d4b5-b970-419c-b1ac-f1b7922398fc","ucid":null,"timestamp":1537365073569},"msg":""}
    * @param {Object} record
    */
-  async processRecordAndCacheInProjectMap (record) {
+  async processRecordAndCacheInProjectMap(record) {
     this.mustBeOverride()
     // let projectId = get(record, ['project_id'], 0)
     // let durationMs = get(record, ['detail', 'duration_ms'], 0)
@@ -198,7 +198,7 @@ class ParseBase extends Base {
   /**
    * [必须覆盖]将数据同步到数据库中
    */
-  async save2DB () {
+  async save2DB() {
     this.mustBeOverride()
     let processRecordCount = 0
     let successSaveCount = 0
@@ -236,7 +236,7 @@ class ParseBase extends Base {
    * @param {*} successSaveCount
    * @param {*} totalRecordCount
    */
-  reportProcess (processRecordCount, successSaveCount, totalRecordCount, tableName = '') {
+  reportProcess(processRecordCount, successSaveCount, totalRecordCount, tableName = '') {
     let insertTable = ''
     if (tableName) {
       insertTable = `, 入库${tableName}`
@@ -249,7 +249,7 @@ class ParseBase extends Base {
   /**
    * [必须覆盖]统计 projectUvMap 中的记录总数
    */
-  getRecordCountInProjectMap () {
+  getRecordCountInProjectMap() {
     this.mustBeOverride()
     let totalCount = 0
     // for (let [projectId, countAtMap] of projectMap) {
@@ -260,7 +260,7 @@ class ParseBase extends Base {
     return totalCount
   }
 
-  mustBeOverride () {
+  mustBeOverride() {
     this.warn('注意, 这里有个方法没有覆盖')
     this.warn('当场退出←_←')
     process.exit(0)

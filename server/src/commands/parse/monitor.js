@@ -71,8 +71,8 @@ class ParseMonitor extends ParseBase {
         errorTypeStr === MMonitor.ERROR_TYPE_页面加载异常 ||
         errorTypeStr === MMonitor.ERROR_TYPE_启动异常 ||
         errorTypeStr === MMonitor.ERROR_TYPE_登录异常 ||
-        errorTypeStr === MMonitor.ERROR_TYPE_NODE 报错 ||
-        errorTypeStr === MMonitor.ERROR_TYPE_JS 异常 ||
+        errorTypeStr === MMonitor.ERROR_TYPE_NODE报错 ||
+        errorTypeStr === MMonitor.ERROR_TYPE_JS异常 ||
         errorTypeStr === MMonitor.ERROR_TYPE_自定义异常
       ) && !errorName
     ) {

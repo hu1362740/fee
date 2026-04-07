@@ -5,8 +5,10 @@ import Knex from '~/src/library/mysql'
 import DATE_FORMAT from '~/src/constants/date_format'
 import MMonitorExt from '~/src/model/parse/monitor_ext'
 
+// 监控日志基础表名前缀
 const BaseTableName = 't_o_monitor'
 
+// 定义各种错误类型的常量标识
 const ERROR_TYPE_HTTP_ERROR = '1'
 const ERROR_TYPE_接口结构异常 = '2'
 const ERROR_TYPE_页面加载异常 = '3'
@@ -16,6 +18,7 @@ const ERROR_TYPE_NODE报错 = '6'
 const ERROR_TYPE_JS异常 = '7'
 const ERROR_TYPE_自定义异常 = '8'
 
+// 错误类型标识到中文描述的映射关系
 const ERROR_TYPE_MAP = {}
 ERROR_TYPE_MAP[ERROR_TYPE_HTTP_ERROR] = 'HTTP_ERROR'
 ERROR_TYPE_MAP[ERROR_TYPE_接口结构异常] = '接口结构异常'
@@ -26,13 +29,19 @@ ERROR_TYPE_MAP[ERROR_TYPE_NODE报错] = 'NODE报错'
 ERROR_TYPE_MAP[ERROR_TYPE_JS异常] = 'JS异常'
 ERROR_TYPE_MAP[ERROR_TYPE_自定义异常] = '自定义异常'
 
+// 查询分组粒度常量：按小时
 const QUERY_GROUP_BY_HOUR = 'hour'
+// 查询分组粒度常量：按分钟
 const QUERY_GROUP_BY_MINUTE = 'minute'
 
+// 获取错误名称列表时的最大搜索记录数限制
 const MAX_SEARCH_ERROR_NAME = 5000
+// 统计分布数据时，最多返回的错误种类数量
 const MAX_DISPLAY_ERROR = 10
+// 分页查询时，限制查询的最大日志长度（通过ID范围限制），防止全表扫描性能问题
 const MAX_ERROR_LOG_LENGTH = 10000
 
+// 数据库表中需要查询或操作的字段列表
 const TABLE_COLUMN = [
   `id`,
   `error_type`,
@@ -53,8 +62,11 @@ const TABLE_COLUMN = [
 ]
 
 /**
- * @param {*} projectId
- * @param {*} visitAt
+ * 根据项目ID和访问时间戳生成对应的分表表名
+ * 表名格式: t_o_monitor_{projectId}_{YYYYMM}
+ * @param {number} projectId - 项目ID
+ * @param {number} visitAt - Unix时间戳
+ * @returns {string} 生成的表名
  */
 function getTableName (projectId, visitAt) {
   let visitAtMonth = moment.unix(visitAt).format('YYYYMM')
@@ -62,8 +74,15 @@ function getTableName (projectId, visitAt) {
 }
 
 /**
- * 统计某一列的个数, 只取前MAX_DISPLAY_ERROR条数据
- * @param {object} params
+ * 统计指定条件下某一列的分组计数
+ * 通常用于统计某种错误类型或URL的出现次数，只取前MAX_DISPLAY_ERROR条数据
+ * @param {object} params - 查询参数对象
+ * @param {string} params.column - 需要分组的列名
+ * @param {number} params.startAt - 开始时间戳
+ * @param {number} params.endAt - 结束时间戳
+ * @param {object} params.whereParams - 其他WHERE条件
+ * @param {number} params.projectId - 项目ID
+ * @returns {Promise<Array>} 分组统计结果数组
  */
 async function groupBy (params) {
   const { column, startAt, endAt, whereParams, projectId } = params
@@ -82,10 +101,11 @@ async function groupBy (params) {
 }
 
 /**
- * 计算同一个月内, 指定项目的错误总数
- * @param {*} projectId
- * @param {*} startAt
- * @param {*} finishAt
+ * 计算同一个月内，指定项目在指定时间范围内的错误总数
+ * @param {number} projectId - 项目ID
+ * @param {number} startAt - 开始时间戳
+ * @param {number} finishAt - 结束时间戳
+ * @returns {Promise<number>} 错误总数
  */
 async function getErrorCountInRangeBySameMonth (projectId, startAt, finishAt) {
   const tableName = getTableName(projectId, startAt)
@@ -102,11 +122,15 @@ async function getErrorCountInRangeBySameMonth (projectId, startAt, finishAt) {
 }
 
 /**
- * 计算同一个月内, 指定项目, 指定错误类型中的错误分布数据(只取前MAX_DISPLAY_ERROR条)
- * @param {*} projectId
- * @param {*} startAt
- * @param {*} finishAt
- * @param {*} errorType
+ * 计算同一个月内，指定项目、指定错误类型下的错误名称分布数据
+ * 支持按分钟或小时分组，只取前MAX_DISPLAY_ERROR条数据
+ * @param {number} projectId - 项目ID
+ * @param {number} startAt - 开始时间戳
+ * @param {number} finishAt - 结束时间戳
+ * @param {string} errorType - 错误类型标识
+ * @param {string} url - 可选的URL过滤条件
+ * @param {string} groupBy - 分组粒度 ('hour' 或 'minute')
+ * @returns {Promise<Array>} 包含错误名称、计数和分组时间的记录列表
  */
 async function getErrorNameDistributionInSameMonth (projectId, startAt, finishAt, errorType, url, groupBy = QUERY_GROUP_BY_MINUTE) {
   // 配置格式化模板
@@ -151,12 +175,12 @@ async function getErrorNameDistributionInSameMonth (projectId, startAt, finishAt
 }
 
 /**
- * 在当前月份表里查询一条报警配置对应的错误
- * @param {number} projectId 要查询的项目id
- * @param {string} errType 查询的错误类型
- * @param {string} errName 查询的错误名字
- * @param {number} startAt 查询的开始时间
- * @param {number} endAt 查询的结束时间
+ * 在当前月份表里查询一条报警配置对应的错误数量
+ * @param {number} projectId - 要查询的项目id
+ * @param {string} errName - 查询的错误名字，如果是 '*' 则不限制错误名
+ * @param {number} startAt - 查询的开始时间
+ * @param {number} endAt - 查询的结束时间
+ * @returns {Promise<number>} 错误数量
  */
 async function getErrorCountForAlarm (projectId, errName, startAt, endAt) {
   const tableName = getTableName(projectId, startAt)
@@ -178,9 +202,11 @@ async function getErrorCountForAlarm (projectId, errName, startAt, endAt) {
 }
 
 /**
- * 获取项目的error name 列表
- * @param {number} projectId
- * @param {string} errorType
+ * 获取项目最近7天内的错误名称列表（去重）
+ * 用于前端下拉框选择等场景，限制最大搜索数量为 MAX_SEARCH_ERROR_NAME
+ * @param {number} projectId - 项目ID
+ * @param {string} errorType - 错误类型
+ * @returns {Promise<Array<string>>} 错误名称列表
  */
 async function getErrorNameList (projectId, errorType) {
   const nowAt = moment().unix()
@@ -210,6 +236,14 @@ async function getErrorNameList (projectId, errorType) {
   return errorNameList
 }
 
+/**
+ * 获取指定时间范围内的原始监控记录列表
+ * 注意：目前使用 endAt 计算表名，可能存在跨月查询问题，待优化
+ * @param {number} projectId - 项目ID
+ * @param {number} startAt - 开始时间戳
+ * @param {number} endAt - 结束时间戳
+ * @returns {Promise<Array>} 原始记录列表
+ */
 async function getRecordListInRange (projectId, startAt, endAt) {
   // @todo(hanqingxin) 应统一使用startAt计算表名
   const tableName = getTableName(projectId, endAt)
@@ -226,14 +260,16 @@ async function getRecordListInRange (projectId, startAt, endAt) {
 }
 
 /**
- * 获取分页总数
- * @param {*} projectId
- * @param {*} startAt
- * @param {*} endAt
- * @param {*} offset
- * @param {*} max
- * @param {*} errorNameList
- * @param {*} url
+ * 获取满足条件的分页总数
+ * 支持按错误名称列表和URL模糊匹配进行过滤
+ * @param {number} projectId - 项目ID
+ * @param {number} startAt - 开始时间戳
+ * @param {number} endAt - 结束时间戳
+ * @param {number} offset - 偏移量（此函数中未直接使用，但作为参数保留以保持一致性）
+ * @param {number} max - 每页最大数量（此函数中未直接使用，但作为参数保留以保持一致性）
+ * @param {Array<string>} errorNameList - 错误名称列表
+ * @param {string} url - URL过滤条件
+ * @returns {Promise<number>} 满足条件的总记录数
  */
 async function getTotalCountByConditionInSameMonth (projectId, startAt, endAt, offset = 0, max = 10, errorNameList = [], url = '') {
   let tableName = getTableName(projectId, startAt)
@@ -261,14 +297,17 @@ async function getTotalCountByConditionInSameMonth (projectId, startAt, endAt, o
 }
 
 /**
- * 获取分页数据
- * @param {*} projectId
- * @param {*} startAt
- * @param {*} endAt
- * @param {*} offset
- * @param {*} max
- * @param {*} errorNameList
- * @param {*} url
+ * 获取满足条件的分页数据列表
+ * 为了性能优化，通过限制ID范围（maxId - MAX_ERROR_LOG_LENGTH）来避免深分页问题
+ * 同时关联查询扩展表信息（ext_json）并合并到结果中
+ * @param {number} projectId - 项目ID
+ * @param {number} startAt - 开始时间戳
+ * @param {number} endAt - 结束时间戳
+ * @param {number} offset - 分页偏移量
+ * @param {number} max - 每页最大数量
+ * @param {Array<string>} errorNameList - 错误名称列表
+ * @param {string} url - URL过滤条件
+ * @returns {Promise<Array>} 包含扩展信息的记录列表
  */
 async function getListByConditionInSameMonth (projectId, startAt, endAt, offset = 0, max = 10, errorNameList = [], url = '') {
   let tableName = getTableName(projectId, startAt)

@@ -7,6 +7,7 @@ import MCityDistribution from '~/src/model/parse/city_distribution'
 import DATE_FORMAT from '~/src/constants/date_format'
 import DatabaseUtil from '~/src/library/utils/modules/database'
 
+// 错误汇总表的标准字段列表
 const TABLE_COLUMN = [
   `id`,
   `error_type`,
@@ -20,17 +21,20 @@ const TABLE_COLUMN = [
   `update_time`
 ]
 
+// 错误汇总表的基础表名前缀，实际表名会根据 projectId 和月份动态生成
 const BASE_TABLE_NAME = 't_r_error_summary'
 const MAX_LIMIT = 100
 
+// Redis 缓存相关常量
 const BASE_REDIS_KEY = 'error_summary'
 const REDIS_KEY_ERROR_NAME_DISTRIBUTION_CACHE = BASE_REDIS_KEY + '_' + 'error_name_distribution_cache'
 
 /**
- * 获取表名
+ * 根据项目ID和创建时间戳获取对应的分表表名
+ * 表名格式: t_r_error_summary_{projectId}_{YYYYMM}
  * @param {number} projectId 项目id
- * @param {number} createTimeAt 创建时间, 时间戳
- * @return {String}
+ * @param {number} createTimeAt 创建时间, Unix时间戳
+ * @return {String} 完整的表名
  */
 function getTableName (projectId, createTimeAt) {
   const DATE_FORMAT = 'YYYYMM'
@@ -38,8 +42,21 @@ function getTableName (projectId, createTimeAt) {
   return BASE_TABLE_NAME + '_' + projectId + '_' + YmDate
 }
 
+/**
+ * 插入一条新的错误汇总记录
+ * @param {number} projectId 项目ID
+ * @param {number} countAt 统计时间点的时间戳
+ * @param {string} countType 统计粒度 (minute/hour/day)
+ * @param {string} errorType 错误类型
+ * @param {string} errorName 错误名称
+ * @param {string} urlPath URL路径
+ * @param {number} cityDistributionId 城市分布记录的ID
+ * @param {number} errorCount 错误次数
+ * @return {boolean} 插入是否成功
+ */
 async function insertErrorSummaryRecord (projectId, countAt, countType, errorType, errorName, urlPath, cityDistributionId, errorCount) {
   const tableName = getTableName(projectId, countAt)
+  // 将时间戳转换为数据库存储的特定格式字符串 (如 '2023-10-27 10:00:00')
   const countAtTime = moment.unix(countAt).format(DATE_FORMAT.DATABASE_BY_UNIT[countType])
   const createTime = moment().unix()
   const insertData = {
@@ -64,6 +81,18 @@ async function insertErrorSummaryRecord (projectId, countAt, countType, errorTyp
   return _.get(result, [0], 0) > 0
 }
 
+/**
+ * 更新已有的错误汇总记录
+ * @param {number} id 记录ID
+ * @param {number} projectId 项目ID
+ * @param {number} countAt 统计时间点的时间戳
+ * @param {string} countType 统计粒度
+ * @param {string} errorType 错误类型
+ * @param {string} errorName 错误名称
+ * @param {string} urlPath URL路径
+ * @param {number} errorCount 错误次数
+ * @return {boolean} 更新是否成功
+ */
 async function updateErrorSummaryRecord (id, projectId, countAt, countType, errorType, errorName, urlPath, errorCount) {
   const tableName = getTableName(projectId, countAt)
   const countAtTime = moment.unix(countAt).format(DATE_FORMAT.DATABASE_BY_UNIT[countType])
@@ -87,7 +116,22 @@ async function updateErrorSummaryRecord (id, projectId, countAt, countType, erro
   return affecRows > 0
 }
 
+/**
+ * 替换（插入或更新）错误汇总记录及关联的城市分布数据
+ * 如果记录不存在，则先插入城市分布数据获取ID，再插入汇总记录；
+ * 如果记录存在，则更新城市分布数据和汇总记录。
+ * @param {number} projectId 项目ID
+ * @param {number} countAt 统计时间点的时间戳
+ * @param {string} countType 统计粒度
+ * @param {string} errorType 错误类型
+ * @param {string} errorName 错误名称
+ * @param {string} urlPath URL路径
+ * @param {number} errorCount 错误次数
+ * @param {string} cityDistrubutionJsonString 城市分布数据的JSON字符串
+ * @return {boolean} 操作是否成功
+ */
 async function replaceSummaryRecord (projectId, countAt, countType, errorType, errorName, urlPath, errorCount, cityDistrubutionJsonString) {
+  // 查询是否存在相同的汇总记录
   const rawRecord = await get(projectId, countAt, countType, errorType, errorName, urlPath)
 
   if (_.isEmpty(rawRecord)) {
@@ -111,6 +155,16 @@ async function replaceSummaryRecord (projectId, countAt, countType, errorType, e
   }
 }
 
+/**
+ * 获取单条错误汇总记录
+ * @param {number} projectId 项目ID
+ * @param {number} countAt 统计时间点的时间戳
+ * @param {string} countType 统计粒度
+ * @param {string} errorType 错误类型
+ * @param {string} errorName 错误名称
+ * @param {string} urlPath URL路径
+ * @return {Object} 匹配的记录对象，若无则返回空对象
+ */
 async function get (projectId, countAt, countType, errorType, errorName, urlPath) {
   const tableName = getTableName(projectId, countAt)
   const countAtTime = moment.unix(countAt).format(DATE_FORMAT.DATABASE_BY_UNIT[countType])
@@ -133,16 +187,18 @@ async function get (projectId, countAt, countType, errorType, errorName, urlPath
 }
 
 /**
- * 获取指定error_name中的错误分布数, 或指定url下, 指定errorNameList下的错误分布数
- * @param {*} projectId
- * @param {*} startAt
- * @param {*} endAt
- * @param {*} countType
- * @param {*} errorNameList
- * @param {*} url
+ * 获取指定时间范围内，指定错误名称列表或URL下的错误名称分布统计
+ * @param {number} projectId 项目ID
+ * @param {number} startAt 开始时间戳
+ * @param {number} endAt 结束时间戳
+ * @param {string} countType 统计粒度
+ * @param {Array<string>} errorNameList 错误名称列表，为空则不限制
+ * @param {string} url URL过滤条件
+ * @return {Array<Object>} 包含 error_name 和 error_count 的对象数组
  */
 async function getErrorNameDistributionListInSameMonth (projectId, startAt, endAt, countType, errorNameList = [], url = {}) {
   const tableName = getTableName(projectId, startAt)
+  // 生成数据库中对应时间粒度的时间字符串列表
   let countAtTimeList = DatabaseUtil.getDatabaseTimeList(startAt, endAt, countType)
   let extendCondition = {}
   if (url.length > 0) {
@@ -176,11 +232,18 @@ async function getErrorNameDistributionListInSameMonth (projectId, startAt, endA
   return recordList
 }
 
+/**
+ * 获取项目最近几天内出现过的所有错误名称列表（去重）
+ * @param {number} projectId 项目ID
+ * @param {string} errorType 错误类型
+ * @return {Array<string>} 错误名称列表
+ */
 async function getErrorNameList (projectId, errorType) {
   const nowMoment = moment().endOf('YYYY-MM-DD')
   const sevenDaysAgoMoment = nowMoment.clone().subtract(3, DATE_FORMAT.UNIT.DAY).startOf('YYYY-MM-DD')
   const tableName = getTableName(projectId, nowMoment.unix())
 
+  // 构建最近几天的时间字符串列表用于查询
   let timeList = []
   for (let timeAt = sevenDaysAgoMoment.unix(); timeAt < nowMoment.unix(); timeAt += 86400) {
     const time = moment.unix(timeAt).format(DATE_FORMAT.DATABASE_BY_DAY)
@@ -205,13 +268,14 @@ async function getErrorNameList (projectId, errorType) {
 }
 
 /**
- * 根据errorNameList获取url分布
- * @param {*} projectId
- * @param {*} startAt
- * @param {*} endAt
- * @param {*} errorNameList
- * @param {*} countType
- * @param {*} max
+ * 根据错误名称列表，获取这些错误对应的URL路径分布统计（按错误总数降序排列）
+ * @param {number} projectId 项目ID
+ * @param {number} startAt 开始时间戳
+ * @param {number} endAt 结束时间戳
+ * @param {Array<string>} errorNameList 错误名称列表
+ * @param {string} countType 统计粒度
+ * @param {number} max 返回的最大记录数
+ * @return {Array<Object>} 包含 url_path 和 error_count 的对象数组
  */
 async function getUrlPathDistributionListByErrorNameList (projectId, startAt, endAt, errorNameList, countType, max = 10) {
   const tableName = getTableName(projectId, startAt)
@@ -244,13 +308,15 @@ async function getUrlPathDistributionListByErrorNameList (projectId, startAt, en
 }
 
 /**
- * 获取错误堆叠图分布
- * @param {*} projectId
- * @param {*} countType
- * @param {*} errorType
- * @param {*} startAt
- * @param {*} endAt
- * @param {*} extendCondition
+ * 获取用于绘制堆叠面积图的错误分布数据
+ * 返回每个时间点各错误类型的错误数
+ * @param {number} projectId 项目ID
+ * @param {number} startAt 开始时间戳
+ * @param {number} endAt 结束时间戳
+ * @param {string} countType 统计粒度
+ * @param {Array<string>} errorNameList 错误名称列表
+ * @param {string} url URL过滤条件
+ * @return {Array<Object>} 包含 error_name, count_at_time, error_count 的对象数组
  */
 async function getStackAreaDistribution (projectId, startAt, endAt, countType, errorNameList = [], url = '') {
   const tableName = getTableName(projectId, startAt)
@@ -286,6 +352,16 @@ async function getStackAreaDistribution (projectId, startAt, endAt, countType, e
   return recordList
 }
 
+/**
+ * 获取错误汇总列表，并关联查询城市分布详情
+ * @param {number} projectId 项目ID
+ * @param {number} startAt 开始时间戳
+ * @param {number} endAt 结束时间戳
+ * @param {string} countType 统计粒度
+ * @param {Array<string>} errorNameList 错误名称列表
+ * @param {string} url URL过滤条件
+ * @return {Array<Object>} 包含完整信息及 city_distribution 对象的记录列表
+ */
 async function getList (projectId, startAt, endAt, countType, errorNameList = [], url = '') {
   const tableName = getTableName(projectId, startAt)
   let timeList = DatabaseUtil.getDatabaseTimeList(startAt, endAt, countType)
@@ -308,6 +384,8 @@ async function getList (projectId, startAt, endAt, countType, errorNameList = []
       return []
     })
   if (rawRecordList.length === 0) return []
+  
+  // 收集所有需要查询的城市分布ID
   let cityDistributionIdList = []
   let createAt = 0
   for (let rawRecord of rawRecordList) {
@@ -315,8 +393,10 @@ async function getList (projectId, startAt, endAt, countType, errorNameList = []
     createAt = _.get(rawRecord, ['create_time'], 0)
     cityDistributionIdList.push(cityDistributionId)
   }
+  // 批量查询城市分布详情
   let rawCityDistributionReocrdList = await MCityDistribution.getByIdListInOneMonth(projectId, cityDistributionIdList, createAt)
 
+  // 构建城市分布ID到解析后JSON对象的映射
   let cityDistributionMap = {}
   for (let rawRecord of rawCityDistributionReocrdList) {
     let cityDistributionJson = _.get(rawRecord, ['city_distribute_json'], '{}')
@@ -329,6 +409,8 @@ async function getList (projectId, startAt, endAt, countType, errorNameList = []
     }
     cityDistributionMap[cityDistributionId] = cityDistribution
   }
+  
+  // 将城市分布数据合并到主记录中
   let recordList = []
   for (let rawRecord of rawRecordList) {
     let cityDistributionId = _.get(rawRecord, ['city_distribution_id'], 0)
@@ -340,14 +422,16 @@ async function getList (projectId, startAt, endAt, countType, errorNameList = []
 }
 
 /**
- * 获取时间范围内, 报错数最多的前max个errorName
- * @param {*} projectId
- * @param {*} startAt
- * @param {*} endAt
- * @return {Array}
+ * 获取指定时间范围内，报错数最多的前 max 个错误名称及其总数
+ * @param {number} projectId 项目ID
+ * @param {number} startAt 开始时间戳
+ * @param {number} endAt 结束时间戳
+ * @param {number} max 最大返回数量
+ * @return {Array<Object>} 包含 error_name 和 error_count 的对象数组
  */
 async function getErrorNameDistributionInSameMonth (projectId, startAt, endAt, max = 500) {
   let tableName = getTableName(projectId, startAt)
+  // 注意：此处硬编码使用 DAY 粒度进行统计，可能与传入的时间范围不完全匹配，需确保调用方意图一致
   let timeList = DatabaseUtil.getDatabaseTimeList(startAt, endAt, DATE_FORMAT.UNIT.DAY)
   let rawDistributionList = await Knex
     .sum('error_count as sum_error_count')
@@ -376,21 +460,28 @@ async function getErrorNameDistributionInSameMonth (projectId, startAt, endAt, m
 }
 
 /**
- * 从缓存中获取最近指定时间范围内的错误数分布, 缓存不存在则重新查询
- * @param {*} projectId
- * @param {*} forceUpdate 是否强制更新缓存
+ * 从 Redis 缓存中获取指定时间范围内的错误名称分布数据
+ * 若缓存不存在或强制更新，则重新查询数据库并写入缓存
+ * @param {number} projectId 项目ID
+ * @param {number} startAt 开始时间戳
+ * @param {number} endAt 结束时间戳
+ * @param {boolean} forceUpdate 是否强制更新缓存
+ * @return {Array<Object>} 聚合后的错误名称分布列表
  */
 async function getErrorNameDistributionByTimeWithCache (projectId, startAt, endAt, forceUpdate = false) {
   let distributionList = []
   let distributionMap = {}
+  // 按天遍历时间范围
   for (let timeAt = startAt; timeAt <= endAt; timeAt += 86400) {
     let key = getRedisKey(REDIS_KEY_ERROR_NAME_DISTRIBUTION_CACHE, projectId, timeAt)
     let redisDistributionList = await redis.asyncGet(key)
 
     if (_.isEmpty(redisDistributionList) || forceUpdate) {
+      // 查询当天的分布数据并写入缓存，过期时间为 1 天
       redisDistributionList = await getErrorNameDistributionInSameMonth(projectId, moment.unix(timeAt).startOf('day').unix(), moment.unix(timeAt).endOf('day').unix())
       await redis.asyncSetex(key, 86400, redisDistributionList)
     }
+    // 累加每天的错误计数到总 Map 中
     for (let redisDistribution of redisDistributionList) {
       let errorName = _.get(redisDistribution, ['error_name'], '')
       let errorCount = _.get(redisDistribution, ['error_count'], 0)
@@ -398,6 +489,7 @@ async function getErrorNameDistributionByTimeWithCache (projectId, startAt, endA
       _.set(distributionMap, [errorName], oldCount + errorCount)
     }
   }
+  // 将 Map 转换回数组格式
   for (let errorName of Object.keys(distributionMap)) {
     distributionList.push({
       error_name: errorName,
@@ -408,10 +500,13 @@ async function getErrorNameDistributionByTimeWithCache (projectId, startAt, endA
 }
 
 /**
- * 获取一个错误name在某一小时或某一天的总次数，服务于errorSummary指令
- * @param {*} projectId
- * @param {*} minuteTimeList
- * @param {*} countType
+ * 获取指定时间范围和统计粒度下的原始错误汇总记录列表
+ * 主要用于上层命令（如 Summary:Error）进行二次聚合处理
+ * @param {number} projectId 项目ID
+ * @param {number} startAt 开始时间戳
+ * @param {number} endAt 结束时间戳
+ * @param {string} countType 统计粒度 (minute/hour/day)
+ * @return {Array<Object>} 原始记录列表
  */
 async function getErrorSummaryByCountType (projectId, startAt, endAt, countType) {
   let tableName = getTableName(projectId, startAt)
@@ -428,9 +523,17 @@ async function getErrorSummaryByCountType (projectId, startAt, endAt, countType)
   return rawResultList
 }
 
+/**
+ * 生成 Redis 缓存键
+ * @param {string} baseKey 基础键名
+ * @param {number} projectId 项目ID
+ * @param {number} timeAt 时间戳
+ * @return {string} 完整的 Redis Key
+ */
 function getRedisKey (baseKey, projectId, timeAt) {
   return baseKey + '_' + projectId + '_' + moment.unix(timeAt).format('YYYY-MM-DD')
 }
+
 export default {
   insertErrorSummaryRecord,
   getTableName,

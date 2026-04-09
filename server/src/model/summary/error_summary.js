@@ -156,33 +156,48 @@ async function replaceSummaryRecord (projectId, countAt, countType, errorType, e
 }
 
 /**
- * 获取单条错误汇总记录
- * @param {number} projectId 项目ID
- * @param {number} countAt 统计时间点的时间戳
- * @param {string} countType 统计粒度
- * @param {string} errorType 错误类型
- * @param {string} errorName 错误名称
- * @param {string} urlPath URL路径
- * @return {Object} 匹配的记录对象，若无则返回空对象
+ * 获取指定条件下的单条错误汇总记录
+ * 
+ * 作用：
+ * 从分月汇总表 (t_r_error_summary_{projectId}_{YYYYMM}) 中查询特定时间点、特定粒度、特定错误维度的聚合数据。
+ * 通常用于前端查看某个具体错误的详细统计信息（如该分钟内的总报错数、城市分布等）。
+ * 
+ * @param {number} projectId - 项目ID，用于确定查询哪张分表
+ * @param {number} countAt - Unix时间戳，统计的时间点
+ * @param {string} countType - 统计粒度 ('minute', 'hour', 'day')，决定时间格式化模板和查询条件
+ * @param {string} errorType - 错误类型标识 (如 '7' 代表 JS异常)
+ * @param {string} errorName - 具体的错误名称 (如 'TypeError: Cannot read property...')
+ * @param {string} urlPath - 发生错误的页面路径或接口路径
+ * @returns {Promise<Object>} 匹配到的第一条汇总记录对象，若未找到则返回空对象 {}
  */
 async function get (projectId, countAt, countType, errorType, errorName, urlPath) {
+  // 根据项目ID和时间戳生成对应的分表表名 (例如: t_r_error_summary_2_202604)
   const tableName = getTableName(projectId, countAt)
+  
+  // 将Unix时间戳转换为数据库存储的字符串格式 (例如: '2026-04-02 11:35' 或 '2026-04-02 11')
   const countAtTime = moment.unix(countAt).format(DATE_FORMAT.DATABASE_BY_UNIT[countType])
 
+  // 构建 WHERE 查询条件
   const wherePrams = {
-    count_at_time: countAtTime,
-    count_type: countType,
-    error_name: errorName,
-    url_path: urlPath
+    count_at_time: countAtTime, // 匹配特定的时间片
+    count_type: countType,      // 匹配特定的统计粒度
+    error_name: errorName,      // 匹配特定的错误名
+    url_path: urlPath           // 匹配特定的URL路径
+    // 注意：此处未包含 errorType 过滤，可能是因为在该业务场景下 errorName + urlPath 已具备唯一性，
+    // 或者调用方已在上一层做了筛选。
   }
+  
+  // 执行 Knex 查询
   const result = await Knex
-    .select(TABLE_COLUMN)
+    .select(TABLE_COLUMN) // 选择预定义的字段列表
     .from(tableName)
     .where(wherePrams)
     .catch((err) => {
       Logger.error(err.message)
       return []
     })
+  
+  // 返回结果集中的第一条记录，如果结果为空则返回空对象，防止前端解构报错
   return _.get(result, [0], {})
 }
 

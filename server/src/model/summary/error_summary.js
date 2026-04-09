@@ -43,22 +43,26 @@ function getTableName (projectId, createTimeAt) {
 }
 
 /**
- * 插入一条新的错误汇总记录
- * @param {number} projectId 项目ID
- * @param {number} countAt 统计时间点的时间戳
- * @param {string} countType 统计粒度 (minute/hour/day)
- * @param {string} errorType 错误类型
- * @param {string} errorName 错误名称
- * @param {string} urlPath URL路径
- * @param {number} cityDistributionId 城市分布记录的ID
- * @param {number} errorCount 错误次数
- * @return {boolean} 插入是否成功
+ * 向错误汇总表中插入一条新的统计记录
+ * 
+ * @param {number} projectId - 项目ID，用于确定分表后缀
+ * @param {number} countAt - 统计时间点的 Unix 时间戳
+ * @param {string} countType - 统计粒度 (minute/hour/day)
+ * @param {string} errorType - 错误类型标识 (如 '1' 代表 HTTP_ERROR)
+ * @param {string} errorName - 具体的错误名称 (如 'TypeError')
+ * @param {string} urlPath - 发生错误的页面路径或接口地址
+ * @param {number} cityDistributionId - 关联的城市分布记录ID，存储在 t_r_city_distribution 表中
+ * @param {number} errorCount - 该维度下的错误发生总次数
+ * @returns {Promise<boolean>} - 插入成功返回 true，失败返回 false
  */
 async function insertErrorSummaryRecord (projectId, countAt, countType, errorType, errorName, urlPath, cityDistributionId, errorCount) {
+  // 根据项目ID和时间戳生成对应的分表表名 (例如: t_r_error_summary_2_202604)
   const tableName = getTableName(projectId, countAt)
-  // 将时间戳转换为数据库存储的特定格式字符串 (如 '2023-10-27 10:00:00')
+  // 将 Unix 时间戳格式化为数据库存储的时间字符串格式 (如 '2026-04-02 11:35:00')
   const countAtTime = moment.unix(countAt).format(DATE_FORMAT.DATABASE_BY_UNIT[countType])
   const createTime = moment().unix()
+  
+  // 构造待插入的数据对象
   const insertData = {
     error_type: errorType,
     error_name: errorName,
@@ -70,6 +74,9 @@ async function insertErrorSummaryRecord (projectId, countAt, countType, errorTyp
     create_time: createTime,
     update_time: createTime
   }
+  
+  // 执行插入操作
+  // 注意：.returning('id') 在 MySQL 中不被支持，Knex 会抛出警告但不会中断执行
   const result = await Knex
     .returning('id')
     .insert(insertData)
@@ -78,25 +85,32 @@ async function insertErrorSummaryRecord (projectId, countAt, countType, errorTyp
       Logger.error(err.message)
       return [0]
     })
+  
+  // 判断插入是否成功：如果返回的结果数组第一个元素大于0，则认为成功
   return _.get(result, [0], 0) > 0
 }
 
 /**
- * 更新已有的错误汇总记录
- * @param {number} id 记录ID
- * @param {number} projectId 项目ID
- * @param {number} countAt 统计时间点的时间戳
- * @param {string} countType 统计粒度
- * @param {string} errorType 错误类型
- * @param {string} errorName 错误名称
- * @param {string} urlPath URL路径
- * @param {number} errorCount 错误次数
- * @return {boolean} 更新是否成功
+ * 更新错误汇总表中的已有统计记录
+ * 
+ * @param {number} id - 要更新的记录主键ID
+ * @param {number} projectId - 项目ID，用于确定分表后缀
+ * @param {number} countAt - 统计时间点的 Unix 时间戳
+ * @param {string} countType - 统计粒度 (minute/hour/day)
+ * @param {string} errorType - 错误类型标识
+ * @param {string} errorName - 具体的错误名称
+ * @param {string} urlPath - 发生错误的页面路径或接口地址
+ * @param {number} errorCount - 更新后的错误发生总次数
+ * @returns {Promise<boolean>} - 更新成功（影响行数>0）返回 true，否则返回 false
  */
 async function updateErrorSummaryRecord (id, projectId, countAt, countType, errorType, errorName, urlPath, errorCount) {
+  // 根据项目ID和时间戳生成对应的分表表名
   const tableName = getTableName(projectId, countAt)
+  // 格式化统计时间
   const countAtTime = moment.unix(countAt).format(DATE_FORMAT.DATABASE_BY_UNIT[countType])
   const updateTime = moment().unix()
+  
+  // 构造待更新的数据对象，通常只更新计数和更新时间
   const updateData = {
     error_type: errorType,
     error_name: errorName,
@@ -106,6 +120,8 @@ async function updateErrorSummaryRecord (id, projectId, countAt, countType, erro
     error_count: errorCount,
     update_time: updateTime
   }
+  
+  // 执行更新操作，通过主键ID定位记录
   const affecRows = await Knex(tableName)
     .update(updateData)
     .where('id', id)
@@ -113,6 +129,8 @@ async function updateErrorSummaryRecord (id, projectId, countAt, countType, erro
       Logger.error(err.message)
       return 0
     })
+  
+  // 如果受影响的行数大于0，说明更新成功
   return affecRows > 0
 }
 

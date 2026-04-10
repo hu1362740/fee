@@ -3,6 +3,11 @@ import moment from 'moment'
 import MSystemRuntimeVersion from '~/src/model/summary/system_runtime_version'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+/**
+ * SystemRuntimeVersionSummary 类
+ * 继承自 Base，用于按月统计各项目的运行时版本 (Runtime Version) 分布情况
+ * 主要功能：调用 Model 层方法，基于 t_o_system_collection 表数据进行聚合统计
+ */
 class SystemRuntimeVersionSummary extends Base {
   static get signature () {
     return `
@@ -17,7 +22,9 @@ class SystemRuntimeVersionSummary extends Base {
   }
 
   /**
-   * 每天跑一次, 获取项目列表, 遍历t_o_system_collection表
+   * 执行运行时版本统计任务
+   * 1. 校验参数 (仅支持按月统计)
+   * 2. 调用 Model 层进行数据统计
    * @param {*} args
    * @param {*} options
    */

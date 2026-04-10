@@ -6,6 +6,15 @@ import MNewUserSummary from '~/src/model/summary/new_user_summary'
 import MUserFirstLoginAt from '~/src/model/parse/user_first_login_at'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+/**
+ * NewUserSummary 类
+ * 继承自 Base，用于汇总统计指定时间范围内的新增用户数
+ * 主要功能：
+ * 1. 按小时/天/月聚合新用户数据
+ * 2. 从 user_first_login_at 表中读取首次登录记录
+ * 3. 统计总数并按城市分布聚合
+ * 4. 写入新用户汇总表
+ */
 class NewUserSummary extends Base {
   static get signature () {
     return `
@@ -20,6 +29,14 @@ class NewUserSummary extends Base {
     return '[按小时/按天/按月] 根据历史数据, 汇总分析记录指定时间范围内的新增用户数'
   }
 
+  /**
+   * 执行新用户汇总任务
+   * 1. 校验参数
+   * 2. 计算时间窗口
+   * 3. 遍历项目，查询首次登录记录，聚合统计
+   * @param {*} args
+   * @param {*} options
+   */
   async execute (args, options) {
     let { countAtTime, countType } = args
     if (this.isArgumentsLegal(args, options) === false) {
@@ -58,15 +75,19 @@ class NewUserSummary extends Base {
 
       let cityDistribution = {}
       let sumTotalCount = 0
+      
+      // 获取该时间段内所有首次登录的用户记录
       let recordList = await MUserFirstLoginAt.getList(projectId, startAt, endAt)
       for (let record of recordList) {
         let { country, province, city } = record
         sumTotalCount = sumTotalCount + 1
+        // 累加城市分布计数
         let oldTotalCount = _.get(cityDistribution, [country, province, city], 0)
         let mergedTotalCount = oldTotalCount + 1
         _.set(cityDistribution, [country, province, city], mergedTotalCount)
       }
 
+      // 写入汇总表
       MNewUserSummary.replaceInto(
         projectId,
         sumTotalCount,

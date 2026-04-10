@@ -3,6 +3,11 @@ import moment from 'moment'
 import MSystemDevice from '~/src/model/summary/system_device'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+/**
+ * SystemDeviceSummary 类
+ * 继承自 Base，用于按月统计各项目的设备类型 (Device) 分布情况
+ * 主要功能：调用 Model 层方法，基于 t_o_system_collection 表数据进行聚合统计
+ */
 class SystemDeviceSummary extends Base {
   static get signature () {
     return `
@@ -17,7 +22,9 @@ class SystemDeviceSummary extends Base {
   }
 
   /**
-   * 每天跑一次, 获取项目列表, 遍历t_o_system_collection表
+   * 执行设备类型统计任务
+   * 1. 校验参数 (仅支持按月统计)
+   * 2. 调用 Model 层进行数据统计
    * @param {*} args
    * @param {*} options
    */

@@ -6,6 +6,15 @@ import MPerformance from '~/src/model/parse/performance'
 import MCityDistribution from '~/src/model/parse/city_distribution'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+/**
+ * PerformanceSummary 类
+ * 继承自 Base，用于汇总统计指定时间范围内的页面性能指标数据
+ * 主要功能：
+ * 1. 按小时/天/月聚合性能数据 (如 DNS耗时, TCP耗时, DOM解析耗时等)
+ * 2. 采用内存聚合模式 (handleInMemery)，先读取下级粒度数据，在内存中合并 PV、SumValue 和城市分布
+ * 3. 批量查询城市分布详情，减少数据库 IO
+ * 4. 写入性能汇总表
+ */
 class PerformanceSummary extends Base {
   static get signature () {
     return `
@@ -20,6 +29,14 @@ class PerformanceSummary extends Base {
     return '[按小时/按天/按月] 根据历史数据, 汇总分析记录指定时间范围内的性能指标数据'
   }
 
+  /**
+   * 执行性能数据汇总任务
+   * 1. 校验参数
+   * 2. 计算时间窗口
+   * 3. 遍历项目，调用内存聚合处理方法
+   * @param {*} args
+   * @param {*} options
+   */
   async execute (args, options) {
     let { countAtTime, countType } = args
     if (this.isArgumentsLegal(args, options) === false) {
@@ -60,6 +77,24 @@ class PerformanceSummary extends Base {
     }
   }
 
+  /**
+   * 内存聚合处理核心逻辑
+   * 步骤：
+   * 1. 确定下级粒度 (小时->分钟, 天->小时, 月->天)
+   * 2. 批量读取下级粒度的性能记录
+   * 3. 在内存中按 [indicator, url] 维度聚合 pv, sum_indicator_value 和 city_distribute_id 列表
+   * 4. 批量查询所有涉及的城市分布详情 (分批查询避免 SQL 过长)
+   * 5. 在内存中合并城市分布 JSON
+   * 6. 调用 replaceInto 写入最终汇总表
+   * @param {*} projectId
+   * @param {*} projectName
+   * @param {*} startAt
+   * @param {*} endAt
+   * @param {*} startAtMoment
+   * @param {*} endAtMoment
+   * @param {*} countAtMoment
+   * @param {*} countType
+   */
   // 数据全部读取出来，放在内存里统一处理
   async handleInMemery (projectId, projectName, startAt, endAt, startAtMoment, endAtMoment, countAtMoment, countType) {
     let getType
@@ -77,9 +112,13 @@ class PerformanceSummary extends Base {
         this.log('指令Summary:Performance参数不对，自动退出！')
         return
     }
+    
+    // 获取下级粒度的原始性能数据
     let rawResultList = await MPerformance.getList(projectId, startAt, endAt, {}, getType)
     let resultMap = {}
     let allCityIdList = []
+    
+    // 第一遍遍历：聚合数值指标，收集城市ID
     for (let rawResult of rawResultList) {
       const {
         sum_indicator_value: sumValue,
@@ -99,16 +138,19 @@ class PerformanceSummary extends Base {
         _.set(resultMap, [indicator, url, 'cityIdList'], [cityDistributionId])
       }
     }
+    
     // 处理城市分布数据,由于mysql限制，一次查10000条数据
     let cityIdLen = allCityIdList.length
     let step = 10000
     let recordList = []
+    // 分批查询城市分布详情
     for (let current = 0; current < cityIdLen; current += step) {
       let sliceIdList = allCityIdList.slice(current, current + step)
       let rawResultList = await MCityDistribution.getByIdListInOneMonth(projectId, sliceIdList, startAt)
       recordList = recordList.concat(rawResultList)
     }
 
+    // 构建城市ID到JSON数据的映射
     let cityMap = {}
     for (let rawRecord of recordList) {
       let id = _.get(rawRecord, ['id'], 0)
@@ -127,7 +169,7 @@ class PerformanceSummary extends Base {
           cityIdList
         } = _.get(resultMap, [indicator, url], {})
 
-        // 先处理城市分布数据
+        // 先处理城市分布数据：合并该指标下所有记录对应的城市分布
         let cityDistributionJson = {}
         for (let cityId of cityIdList) {
           let rawCityDistributionJson = _.get(cityMap, [cityId], {})
@@ -162,6 +204,7 @@ class PerformanceSummary extends Base {
   }
 
   // 实时的与数据库交互拿数据处理数据，时间花在与数据库通讯上，不值
+  // 此方法已废弃，保留作为参考
   async handleSummary (projectId, projectName, startAt, endAt, startAtMoment, endAtMoment, countAtMoment, countType, getType) {
     let indicatorMapKeys = Object.keys(MPerformance.INDICATOR_TYPE_MAP)
     for (let indicator of indicatorMapKeys) {

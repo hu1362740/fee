@@ -5,6 +5,13 @@ import DATE_FORMAT from '~/src/constants/date_format'
 
 const DATE_FORMAT_ARGUMENTS = DATE_FORMAT.COMMAND_ARGUMENT_BY_UNIT
 
+/**
+ * HttpErrorSummary 类
+ * 继承自 Base，用于汇总统计指定时间范围内的 HTTP 错误分布情况
+ * 主要功能：
+ * 1. 按天/月聚合 HTTP 错误数据
+ * 2. 调用 Model 层方法进行统计
+ */
 class HttpErrorSummary extends Base {
   static get signature () {
     return `
@@ -19,7 +26,10 @@ class HttpErrorSummary extends Base {
   }
 
   /**
-   * 每天跑一次, 获取项目列表, 遍历t_o_system_collection_1表
+   * 执行 HTTP 错误汇总任务
+   * 1. 校验参数
+   * 2. 计算时间窗口
+   * 3. 调用 Model 层进行统计
    * @param {*} args
    * @param {*} options
    */

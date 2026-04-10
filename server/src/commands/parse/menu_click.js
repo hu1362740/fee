@@ -1,4 +1,3 @@
-
 import ParseBase from '~/src/commands/parse/base'
 import moment from 'moment'
 import _ from 'lodash'
@@ -6,14 +5,22 @@ import MBehaviorDistribution from '~/src/model/parse/behavior_distribution'
 import MCityDistribution from '~/src/model/parse/city_distribution'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+// 合法记录类型标识
 const LegalRecordType = 'product'
+// 合法记录代码标识 (10002 代表菜单点击)
 const LegalRecordCode = 10002
 
 const COUNT_TYPE_HOUR = DATE_FORMAT.UNIT.HOUR
 const COUNT_BY_HOUR_DATE_FORMAT = DATE_FORMAT.DATABASE_BY_HOUR
 
 /**
- * 解析用户点击情况
+ * MenuClick 类
+ * 继承自 ParseBase，用于解析 Kafka 日志中的用户菜单点击行为
+ * 主要功能：
+ * 1. 过滤 type='product' 且 code=10002 的记录
+ * 2. 按小时、菜单Code聚合点击次数
+ * 3. 统计点击行为的地理位置分布
+ * 4. 写入行为分布表
  */
 class MenuClick extends ParseBase {
   static get signature () {
@@ -29,10 +36,15 @@ class MenuClick extends ParseBase {
   }
 
   /**
-     * 判断该条记录是不是需要解析的记录
-     * @param {Object} record
-     * @return {Boolean}
-     */
+   * 判断该条记录是不是需要解析的菜单点击记录
+   * 校验规则：
+   * 1. type 必须为 'product'
+   * 2. code 必须为 10002
+   * 3. projectId 必须为正整数
+   * 4. detail.code (菜单代码) 不能为空
+   * @param {Object} record
+   * @return {Boolean}
+   */
   isLegalRecord (record) {
     let recordType = _.get(record, ['type'], '')
     let code = _.get(record, ['code'], '')
@@ -65,7 +77,13 @@ class MenuClick extends ParseBase {
   }
 
   /**
-   * 更新记录
+   * 处理单条记录并缓存到内存 Map 中
+   * 逻辑：
+   * 1. 提取菜单名称、Code、URL（限制长度200）
+   * 2. 按小时格式化时间
+   * 3. 构建嵌套 Map 结构: Map<projectId, Map<countAtTime, Map<code, recordPackage>>>
+   * 4. recordPackage 包含 distribution (城市分布计数) 和基础信息
+   * @param {Object} record
    */
   async processRecordAndCacheInProjectMap (record) {
     let projectId = _.get(record, ['project_id'], '')
@@ -118,7 +136,12 @@ class MenuClick extends ParseBase {
   }
 
   /**
-   * 将数据同步到数据库中
+   * 将内存中缓存的行为数据同步保存到数据库
+   * 逻辑：
+   * 1. 遍历 projectMap
+   * 2. 对每个菜单 Code，计算总点击数 (totalCount)
+   * 3. 调用 MBehaviorDistribution.replaceRecord 写入或更新汇总表
+   * @return {Object} 统计结果
    */
   async save2DB () {
     let totalRecordCount = this.getRecordCountInProjectMap()
@@ -147,7 +170,8 @@ class MenuClick extends ParseBase {
   }
 
   /**
-   * 统计 projectUvMap 中的记录总数
+   * 统计 projectMap 中的记录总数
+   * @return {Number}
    */
   getRecordCountInProjectMap () {
     let totalCount = 0

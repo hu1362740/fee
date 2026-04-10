@@ -8,7 +8,20 @@ import DataCleaning from '~/src/commands/utils/data_cleaning'
 let datacleaning = new DataCleaning()
 const BaseTableName = 't_o_system_collection'
 
+/**
+ * ParseDevice 类
+ * 继承自 ParseBase，用于解析 Kafka 日志中的设备详细信息（User-Agent, OS, Browser等）
+ * 主要功能：
+ * 1. 过滤合法的 Device 记录
+ * 2. 解析 UA 字符串为结构化数据
+ * 3. 数据清洗（处理旧版 SDK 兼容性问题）
+ * 4. 按项目ID和月份聚合数据，并写入分表 t_o_system_collection_{projectId}
+ */
 class ParseDevice extends ParseBase {
+  /**
+   * 定义命令行签名
+   * 接收开始时间和结束时间参数，格式为分钟级字符串
+   */
   static get signature () {
     return `
       Parse:Device
@@ -17,13 +30,20 @@ class ParseDevice extends ParseBase {
     `
   }
 
+  /**
+   * 命令描述
+   */
   static get description () {
     return '[按天] 解析kafka日志, 分析指定时间范围Device'
   }
 
   /**
-   * 判断该条记录是不是device记录
-   * @param {Object} record
+   * 判断该条记录是不是合法的 device 记录
+   * 校验规则：
+   * 1. uuid 不能为空
+   * 2. ua (User-Agent) 对象不能为空
+   * 3. 过滤旧版打点中错误的 Chrome 版本号（固定为 537.36 或大于 537 的异常值）
+   * @param {Object} record - 原始日志记录
    * @return {Boolean}
    */
   isLegalRecord (record) {
@@ -44,7 +64,12 @@ class ParseDevice extends ParseBase {
   }
 
   /**
-   * 更新记录
+   * 处理单条记录并缓存到内存 Map 中
+   * 逻辑：
+   * 1. 提取设备相关信息（浏览器、引擎、设备厂商、OS等）
+   * 2. 调用 DataCleaning 进行数据标准化清洗
+   * 3. 将记录存入 projectMap，结构为: Map<projectId, Map<visitAtMonth, Map<uuid, deviceRecord>>>
+   * @param {Object} record - 原始日志记录
    */
   async processRecordAndCacheInProjectMap (record) {
     let commonInfo = _.get(record, ['common'], {})
@@ -64,6 +89,7 @@ class ParseDevice extends ParseBase {
     let os = _.get(ua, ['os', 'name'], '')
     let osVersion = _.get(ua, ['os', 'version'], '')
     let runtimeVersion = _.get(commonInfo, ['runtime_version'], '')
+    // 格式化时间为月份，用于分表键
     let visitAtMonth = moment.unix(visitAt).format(DATE_FORMAT.DATABASE_BY_MONTH)
     let deviceRecord = {
       projectId,
@@ -97,6 +123,7 @@ class ParseDevice extends ParseBase {
         deviceMap = visitAtMap.get(visitAtMonth)
       }
     }
+    // 以 uuid 为 key 存储设备记录，后续保存时会去重或更新
     deviceMap.set(uuid, deviceRecord)
     visitAtMap.set(visitAtMonth, deviceMap)
     this.projectMap.set(projectId, visitAtMap)
@@ -104,7 +131,12 @@ class ParseDevice extends ParseBase {
   }
 
   /**
-   * 将数据同步到数据库中
+   * 将内存中缓存的设备数据同步保存到数据库
+   * 逻辑：
+   * 1. 遍历 projectMap
+   * 2. 根据 projectId 确定目标分表
+   * 3. 使用 replaceInto 模式写入数据，确保同一月份同一 uuid 的数据唯一性
+   * @return {Object} 统计结果
    */
   async save2DB () {
     let totalRecordCount = this.getRecordCountInProjectMap()
@@ -153,7 +185,8 @@ class ParseDevice extends ParseBase {
   }
 
   /**
-   * 统计 projectdeviceMap 中的记录总数
+   * 统计 projectMap 中缓存的记录总数
+   * @return {Number}
    */
   getRecordCountInProjectMap () {
     let totalCount = 0

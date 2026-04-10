@@ -4,6 +4,15 @@ import moment from 'moment'
 import MPerformance from '~/src/model/parse/performance'
 import ParseBase from '~/src/commands/parse/base'
 
+/**
+ * ParseUV (实际应为 ParsePerformance) 类
+ * 继承自 ParseBase，用于解析 Kafka 日志中的页面性能数据
+ * 主要功能：
+ * 1. 过滤 type='perf' 的记录
+ * 2. 根据 Performance Timing API 数据计算各项耗时指标
+ * 3. 按分钟、URL、指标类型、地理位置聚合数据 (Sum Value, PV)
+ * 4. 写入性能汇总表
+ */
 class ParseUV extends ParseBase {
   static get signature() {
     return `
@@ -18,7 +27,10 @@ class ParseUV extends ParseBase {
   }
 
   /**
-   * 判断该条记录是不是perf记录
+   * 判断该条记录是不是合法的性能记录
+   * 校验规则：
+   * 1. type 必须为 'perf'
+   * 2. projectId 必须为正整数
    * @param {Object} record
    * @return {Boolean}
    */
@@ -38,9 +50,13 @@ class ParseUV extends ParseBase {
   }
 
   /**
-   * 更新并替换projectMap中的总记录数
-   * @param {*} indicator
-   * @param {*} indicatorValue
+   * 更新并替换 projectMap 中的指标记录
+   * 逻辑：
+   * 1. 构建唯一键路径: [projectId, url, indicator, countAtMinute]
+   * 2. 构建地理位置路径: [country, province, city]
+   * 3. 在 Map 中累加 sum_indicator_value 和 pv
+   * @param {*} indicator - 指标类型常量
+   * @param {*} indicatorValue - 计算出的指标值
    * @param {*} projectId
    * @param {*} url
    * @param {*} countAtMinute
@@ -80,9 +96,12 @@ class ParseUV extends ParseBase {
   }
 
   /**
-   * 根据指标类型, 自动计算指标数据, 数据异常返回-1
-   * @param {*} indicator
-   * @param {*} indicatorCollection
+   * 根据指标类型, 自动计算指标数据
+   * 利用 Performance Timing API 的时间戳差值计算耗时
+   * 若数据异常（负数、过大、缺失）则返回 -1
+   * @param {*} indicator - 指标类型
+   * @param {*} indicatorCollection - 包含各个时间戳的对象
+   * @return {Number} 耗时(ms)，异常返回 -1
    */
   computeIndicatorValue(indicator, indicatorCollection) {
     // DNS查询: domainLookupEnd - domainLookupStart
@@ -174,7 +193,13 @@ class ParseUV extends ParseBase {
   }
 
   /**
-   * 更新记录
+   * 处理单条性能记录并缓存
+   * 逻辑：
+   * 1. 校验基本字段 (time, detail, url)
+   * 2. 遍历所有预定义的性能指标
+   * 3. 计算每个指标的耗时，若合法则调用 replaceIndicatorRecord 累加
+   * @param {Object} record
+   * @return {Boolean}
    */
   async processRecordAndCacheInProjectMap(record) {
     let visitAt = _.get(record, ['time'], 0)
@@ -219,7 +244,13 @@ class ParseUV extends ParseBase {
   }
 
   /**
-   * 将数据同步到数据库中
+   * 将内存中缓存的性能数据同步保存到数据库
+   * 逻辑：
+   * 1. 遍历 projectMap，键为 [projectId, url, indicator, countAtMinute]
+   * 2. 汇总该维度下所有城市的 PV 和 Sum Indicator Value
+   * 3. 构建城市分布 JSON
+   * 4. 调用 MPerformance.replaceInto 写入数据库
+   * @return {Object} 统计结果
    */
   async save2DB() {
     let totalRecordCount = this.getRecordCountInProjectMap()
@@ -256,7 +287,8 @@ class ParseUV extends ParseBase {
   }
 
   /**
-   * 统计 projectUvMap 中的记录总数
+   * 统计 projectMap 中的记录总数
+   * @return {Number}
    */
   getRecordCountInProjectMap() {
     let totalCount = 0

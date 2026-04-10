@@ -6,14 +6,27 @@ import MCityDistribution from '~/src/model/parse/city_distribution'
 import MUniqueView from '~/src/model/summary/unique_view'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+// 合法记录类型标识
 const LegalRecordType = 'product'
+// 合法记录代码标识 (10001 代表停留时长)
 const LegalRecordCode = 10001
-const MaxAllowRecordDuringMs = 7200000 // 用户停留时长不能超过两小时(避免作弊)
-const MinAllowRecordDuringMs = 0 // 用户停留时长不能小于0
+// 用户停留时长不能超过两小时(避免作弊或异常数据)
+const MaxAllowRecordDuringMs = 7200000 
+// 用户停留时长不能小于0
+const MinAllowRecordDuringMs = 0 
 
 const COUNT_TYPE_HOUR = 'hour'
 const COUNT_BY_HOUR_DATE_FORMAT = DATE_FORMAT.DATABASE_BY_HOUR
 
+/**
+ * TimeOnSiteByHour 类
+ * 继承自 ParseBase，用于解析 Kafka 日志中的用户页面停留时长
+ * 主要功能：
+ * 1. 过滤 type='product' 且 code=10001 的记录
+ * 2. 校验停留时长合理性 (0 ~ 2小时)
+ * 3. 按小时、地理位置聚合停留时长 (ms)
+ * 4. 结合 UV 数据，写入停留时长分布表
+ */
 class TimeOnSiteByHour extends ParseBase {
   static get signature () {
     return `
@@ -28,7 +41,11 @@ class TimeOnSiteByHour extends ParseBase {
   }
 
   /**
-   * 判断该条记录是不是需要解析的记录
+   * 判断该条记录是不是需要解析的停留时长记录
+   * 校验规则：
+   * 1. type='product', code=10001
+   * 2. projectId 为正整数
+   * 3. duration_ms 在合法范围内
    * @param {Object} record
    * @return {Boolean}
    */
@@ -68,7 +85,13 @@ class TimeOnSiteByHour extends ParseBase {
   }
 
   /**
-   * 更新记录
+   * 处理单条记录并缓存到内存 Map 中
+   * 逻辑：
+   * 1. 提取 duration_ms 和地理位置
+   * 2. 按小时格式化时间
+   * 3. 构建嵌套结构: Map<projectId, Map<countAtTime, distribution>>
+   * 4. distribution 是一个以 [country, province, city] 为路径的对象，值为累计的停留时长(ms)
+   * @param {Object} record
    */
   async processRecordAndCacheInProjectMap (record) {
     let projectId = _.get(record, ['project_id'], 0)
@@ -100,7 +123,13 @@ class TimeOnSiteByHour extends ParseBase {
   }
 
   /**
-   * 将数据同步到数据库中
+   * 将内存中缓存的停留时长数据同步保存到数据库
+   * 逻辑：
+   * 1. 遍历 projectMap
+   * 2. 计算该小时该分布下的总停留时长 (totalStayMs)
+   * 3. 获取该小时该项目的总 UV (totalUv)
+   * 4. 调用 MDurationDistribution.replaceUvRecord 写入数据
+   * @return {Object} 统计结果
    */
   async save2DB () {
     let totalRecordCount = this.getRecordCountInProjectMap()
@@ -127,7 +156,8 @@ class TimeOnSiteByHour extends ParseBase {
   }
 
   /**
-   * 统计 projectUvMap 中的记录总数
+   * 统计 projectMap 中的记录总数
+   * @return {Number}
    */
   getRecordCountInProjectMap () {
     let totalCount = 0

@@ -8,10 +8,10 @@ const TABLE_NAME = 't_r_behavior_distribution'
 const TABLE_COLUMN = [
   `id`,
   `project_id`,
-  `code`,
-  `name`,
-  `url`,
-  `total_count`,
+  `code`,      // 行为代码，如菜单Code
+  `name`,      // 行为名称
+  `url`,       // 关联URL
+  `total_count`, // 总次数
   `count_at_time`,
   `count_type`,
   `city_distribute_id`,
@@ -21,6 +21,7 @@ const TABLE_COLUMN = [
 
 /**
  * 获取表名
+ * 行为分布表不分表
  * @param {number} projectId 项目id
  * @param {number} createTimeAt 创建时间, 时间戳
  * @return {String}
@@ -30,15 +31,19 @@ function getTableName () {
 }
 
 /**
- * 自动创建&更新, 并增加total_stay_ms的值
+ * 自动创建或更新行为分布记录
+ * 逻辑：
+ * 1. 根据 projectId, code, count_at_time, count_type 查找记录
+ * 2. 若存在，更新 total_count 及关联的城市分布数据
+ * 3. 若不存在，先插入城市分布数据，再插入主记录
  * @param {number} projectId
- * @param {string} code
- * @param {string} name
- * @param {string} url
- * @param {number} totalCount
- * @param {number} countAtTime
- * @param {string} countType
- * @param {object} cityDistribute
+ * @param {string} code 行为代码
+ * @param {string} name 行为名称
+ * @param {string} url 关联URL
+ * @param {number} totalCount 总次数
+ * @param {number} countAtTime 统计时间点
+ * @param {string} countType 统计粒度
+ * @param {object} cityDistribute 城市分布数据
  * @return {boolean}
  */
 async function replaceRecord (projectId, code, name, url, totalCount, countAtTime, countType, cityDistribute) {
@@ -103,6 +108,13 @@ async function replaceRecord (projectId, code, name, url, totalCount, countAtTim
   return isSuccess
 }
 
+/**
+ * 获取行为分布记录列表
+ * @param {*} projectId
+ * @param {*} startAt
+ * @param {*} finishAt
+ * @param {*} countType
+ */
 async function getRecordList (projectId, startAt, finishAt, countType) {
   let tableName = getTableName()
   let countAtTimeList = []

@@ -9,6 +9,7 @@ import MCityDistribution from '~/src/model/parse/city_distribution'
 
 const BASE_TABLE_NAME = 't_r_performance'
 
+// 定义各种性能指标对应的数据库字段名
 const INDICATOR_TYPE_DNS查询耗时 = 'dns_lookup_ms'
 const INDICATOR_TYPE_TCP链接耗时 = 'tcp_connect_ms'
 const INDICATOR_TYPE_请求响应耗时 = 'response_request_ms'
@@ -44,21 +45,22 @@ const INDICATOR_TYPE_LIST = Object.keys(INDICATOR_TYPE_MAP)
 
 const TABLE_COLUMN = [
   `id`,
-  `sum_indicator_value`,
-  `pv`,
-  `indicator`,
-  `url`,
-  `city_distribute_id`,
-  `count_at_time`,
-  `count_type`,
+  `sum_indicator_value`, // 指标值总和，用于计算平均值
+  `pv`,                  // 页面访问量
+  `indicator`,           // 指标类型
+  `url`,                 // 页面URL
+  `city_distribute_id`,  // 关联的城市分布ID
+  `count_at_time`,       // 统计时间点
+  `count_type`,          // 统计粒度 (minute/hour/day)
   `create_time`,
   `update_time`
 ]
 
 /**
  * 获取表名
+ * 性能数据表按月分表，格式为: t_r_performance_{projectId}_{YYYYMM}
  * @param {*} projectId
- * @param {number} createAt
+ * @param {number} createAt 创建时间戳，用于确定月份
  */
 function getTableName (projectId, createAt) {
   let createAtMoment = moment.unix(createAt)
@@ -67,12 +69,12 @@ function getTableName (projectId, createAt) {
 }
 
 /**
- * 获取性能指标记录
+ * 获取单条性能指标记录
  * @param {*} projectId
  * @param {*} url
- * @param {*} indicator
- * @param {*} countAt
- * @param {*} countType
+ * @param {*} indicator 指标类型
+ * @param {*} countAt 统计时间点
+ * @param {*} countType 统计粒度
  */
 async function get (projectId, url, indicator, countAt, countType = DATE_FORMAT.UNIT.MINUTE) {
   let tableName = getTableName(projectId, countAt)
@@ -97,26 +99,29 @@ async function get (projectId, url, indicator, countAt, countType = DATE_FORMAT.
 }
 
 /**
- * 获取记录列表
+ * 获取性能指标记录列表
+ * 支持跨月查询，会自动获取范围内所有涉及的月份表进行联合查询
  * @param {*} projectId
- * @param {*} startAt
- * @param {*} finishAt
- * @param {*} condition
+ * @param {*} startAt 开始时间
+ * @param {*} finishAt 结束时间
+ * @param {*} condition 查询条件，可包含 urlList 和 indicatorList
  * @param {*} countAt
- * @param {*} countType
+ * @param {*} countType 统计粒度
  */
 async function getList (projectId, startAt, finishAt, condition = {}, countType = DATE_FORMAT.UNIT.MINUTE) {
   let startAtMoment = moment.unix(startAt)
   let recordList = []
+  // 获取时间范围内所有涉及的表名
   let tableNameList = DatabaseUtil.getTableNameListInRange(projectId, startAt, finishAt, getTableName)
 
   let countAtTimeList = []
-  // 获取所有可能的countAtTime
+  // 获取所有可能的countAtTime格式化字符串
   for (let countStartAtMoment = startAtMoment.clone(); countStartAtMoment.unix() < finishAt; countStartAtMoment = countStartAtMoment.clone().add(1, countType)) {
     let formatCountAtTime = countStartAtMoment.format(DATE_FORMAT.DATABASE_BY_UNIT[countType])
     countAtTimeList.push(formatCountAtTime)
   }
 
+  // 遍历每个分表进行查询
   for (let tableName of tableNameList) {
     let rawRecordList = await Knex
       .select(TABLE_COLUMN)
@@ -142,9 +147,10 @@ async function getList (projectId, startAt, finishAt, condition = {}, countType 
 }
 
 /**
- * 获取一段时间内的所有url列表, 方便进行汇总计算
+ * 获取一段时间内出现过的所有URL列表
+ * 用于后续汇总计算，避免全表扫描
  * @param {*} projectId
- * @param {*} indicatorList
+ * @param {*} indicatorList 关注的指标列表
  * @param {*} startAt
  * @param {*} endAt
  * @param {*} countType
@@ -181,10 +187,20 @@ async function getDistinctUrlListInRange (projectId, indicatorList, startAt, end
       }
     }
   }
+  // 去重
   let distinctUrlList = _.union(urlList)
   return distinctUrlList
 }
 
+/**
+ * 获取同一月份内指定URL列表的性能概览
+ * 计算每个指标的平均值 (sum_indicator_value / pv)
+ * @param {*} projectId
+ * @param {*} urlList
+ * @param {*} startAt
+ * @param {*} endAt
+ * @param {*} countType
+ */
 async function getUrlOverviewInSameMonth (projectId, urlList, startAt, endAt, countType) {
   let startAtMoment = moment.unix(startAt).startOf(countType)
   let overview = {}
@@ -197,7 +213,7 @@ async function getUrlOverviewInSameMonth (projectId, urlList, startAt, endAt, co
     countAtTimeList.push(formatCountAtTime)
   }
 
-  // 查询数据库
+  // 查询数据库，按URL、类型、指标分组求和
   let rawRecordList = await Knex
     .select(['url', 'count_type', 'indicator'])
     .sum('sum_indicator_value as total_sum_indicator_value')
@@ -216,6 +232,7 @@ async function getUrlOverviewInSameMonth (projectId, urlList, startAt, endAt, co
       return []
     })
   let rawOverview = {}
+  // 聚合数据
   for (let rawRecord of rawRecordList) {
     let indicator = _.get(rawRecord, ['indicator'], '')
     let totalSumIndicatorValue = _.get(rawRecord, ['total_sum_indicator_value'], 0)
@@ -231,6 +248,7 @@ async function getUrlOverviewInSameMonth (projectId, urlList, startAt, endAt, co
     }
   }
 
+  // 计算每个指标的平均值
   for (let indicator of INDICATOR_TYPE_LIST) {
     if (_.has(rawOverview, [indicator])) {
       let sum = _.get(rawOverview, [indicator, 'total_sum_indicator_value'], 0)
@@ -245,7 +263,8 @@ async function getUrlOverviewInSameMonth (projectId, urlList, startAt, endAt, co
 }
 
 /**
- * 生成同一月内的指标数据
+ * 生成同一月内的指标折线图数据
+ * 返回按时间排序的指标值数组，缺失时间点补0
  * @param {*} projectId
  * @param {*} url
  * @param {*} indicator
@@ -261,7 +280,7 @@ async function getIndicatorLineChartDataInSameMonth (projectId, url, indicator, 
   let unixKeyList = []
 
   let countAtTimeList = []
-  // 获取所有可能的countAtTime
+  // 获取所有可能的countAtTime，并生成对应的时间戳Key列表
   for (let countStartAtMoment = startAtMoment.clone(); countStartAtMoment.unix() < endAt; countStartAtMoment = countStartAtMoment.clone().add(1, countType)) {
     let formatCountAtTime = countStartAtMoment.format(DATE_FORMAT.DATABASE_BY_UNIT[countType])
     countAtTimeList.push(formatCountAtTime)
@@ -282,6 +301,7 @@ async function getIndicatorLineChartDataInSameMonth (projectId, url, indicator, 
       Logger.warn('查询失败, 错误原因 =>', e)
       return []
     })
+  // 将查询结果映射到时间戳Key
   for (let rawRecord of rawRecordList) {
     let countAtTime = _.get(rawRecord, ['count_at_time'], 0)
     let sumIndicatorValue = _.get(rawRecord, ['sum_indicator_value'], 0)
@@ -289,6 +309,7 @@ async function getIndicatorLineChartDataInSameMonth (projectId, url, indicator, 
     let recordAt = moment(countAtTime, DATE_FORMAT.DATABASE_BY_UNIT[countType]).unix()
     lineChartDataMap[recordAt] = parseInt(DatabaseUtil.computePercent(sumIndicatorValue, pv, false))
   }
+  // 按时间顺序生成最终列表，缺失值补0
   for (let unixKey of unixKeyList) {
     let result = _.get(lineChartDataMap, [unixKey], 0)
     lineChartDataList.push({
@@ -303,7 +324,10 @@ async function getIndicatorLineChartDataInSameMonth (projectId, url, indicator, 
 
 /**
  * 获取指定时间范围内的按城市分布的性能指标
+ * 合并多个记录的城市分布数据
  * @param {*} projectId
+ * @param {*} urlList
+ * @param {*} indicatorList
  * @param {*} startAt
  * @param {*} endAt
  * @param {*} countType
@@ -319,7 +343,9 @@ async function getCityDistributeInRange (projectId, urlList, indicatorList, star
     if (_.isEmpty(rawRecord) || cityDistributeId === 0) {
       continue
     }
+    // 获取单个记录的城市分布详情
     let cityDistributeItem = await MCityDistribution.getCityDistributionRecord(cityDistributeId, projectId, recordCreateAt)
+    // 合并到总分布中
     cityDistributeTotal = MCityDistribution.mergeDistributionData(
       cityDistributeItem,
       cityDistributeTotal,
@@ -335,7 +361,16 @@ async function getCityDistributeInRange (projectId, urlList, indicatorList, star
 }
 
 /**
- * 自动创建&更新页面性能数据记录
+ * 自动创建或更新页面性能数据记录
+ * 同时处理关联的城市分布数据
+ * @param {*} projectId
+ * @param {*} url
+ * @param {*} indicator
+ * @param {*} countAt
+ * @param {*} countType
+ * @param {*} sumIndicatorValue 指标值总和
+ * @param {*} pv 页面访问量
+ * @param {*} cityDistribute 城市分布对象
  */
 async function replaceInto (projectId, url, indicator, countAt, countType = DATE_FORMAT.UNIT.MINUTE, sumIndicatorValue = 0, pv = 0, cityDistribute = {}) {
   let tableName = getTableName(projectId, countAt)
@@ -345,7 +380,7 @@ async function replaceInto (projectId, url, indicator, countAt, countType = DATE
 
   let updateAt = moment().unix()
 
-  // 返回值是一个列表
+  // 查找是否已存在记录
   let oldRecordList = await Knex
     .select([`id`, `create_time`, `city_distribute_id`])
     .from(tableName)

@@ -20,8 +20,9 @@ const TABLE_COLUMN = [
 
 /**
  * 获取表名
+ * UV记录表按月分表，格式为: t_o_uv_record_{projectId}_{YYYYMM}
  * @param {number} projectId 项目id
- * @param {number} createTimeAt 创建时间, 时间戳
+ * @param {number} createTimeAt 创建时间, 时间戳，用于确定月份
  * @return {String}
  */
 function getTableName (projectId, createTimeAt) {
@@ -30,14 +31,18 @@ function getTableName (projectId, createTimeAt) {
 }
 
 /**
- * 自动创建&更新uv记录(不更新pv, pv无意义)
+ * 自动创建或更新UV记录
+ * 逻辑：
+ * 1. 根据 uuid 和 visit_at_hour (访问小时) 判断记录是否存在
+ * 2. 若存在，更新地理位置信息和更新时间 (PV计数在此场景中固定为0或无意义，故不累加)
+ * 3. 若不存在，插入新记录
  * @param {number} projectId
- * @param {string} uuid
- * @param {number} visitAt
+ * @param {string} uuid 用户唯一标识
+ * @param {number} visitAt 访问时间戳
  * @param {string} country
  * @param {string} province
  * @param {string} city
- * @return {boolean}
+ * @return {boolean} 操作是否成功
  */
 async function replaceUvRecord (projectId, uuid, visitAt, country, province, city) {
   // pv数无意义, 不再计算
@@ -88,11 +93,11 @@ async function replaceUvRecord (projectId, uuid, visitAt, country, province, cit
 }
 
 /**
- * 获取指定小时内的uuid列表
+ * 获取指定小时内已存在的UUID集合
+ * 用于在入库前进行去重判断，避免重复插入同一小时内的同一用户
  * @param {*} projectId
- * @param {*} uuid
- * @param {*} visitAt
- * @return {Object}
+ * @param {*} visitAt 访问时间戳，用于确定表和小时
+ * @return {Set<String>} 已存在的UUID集合
  */
 async function getExistUuidSetInHour (projectId, visitAt) {
   let visitAtHour = moment.unix(visitAt).format(VisitAtHourDateFormat)
@@ -113,11 +118,12 @@ async function getExistUuidSetInHour (projectId, visitAt) {
 }
 
 /**
- * 获取一段时间范围内的按城市分布uv数
+ * 获取一段时间范围内的按城市分布的UV数
+ * 注意：由于UV表按月分表，需要遍历每个月份表进行聚合统计
  * @param {*} projectId
- * @param {*} startAt
- * @param {*} finishAt
- * @returns {Array}
+ * @param {*} startAt 开始时间戳
+ * @param {*} finishAt 结束时间戳
+ * @returns {Object} 城市分布对象，结构如 { 'China': { 'Beijing': { 'Beijing': count } } }
  */
 async function getCityDistributeInRange (projectId, startAt, finishAt) {
   let startAtMoment = moment.unix(startAt)

@@ -8,8 +8,8 @@ const TableName = 't_r_duration_distribution'
 const TABLE_COLUMN = [
   `id`,
   `project_id`,
-  `total_stay_ms`,
-  `total_uv`,
+  `total_stay_ms`, // 总停留时长(ms)
+  `total_uv`,      // 总独立访客数
   `count_at_time`,
   `count_type`,
   `city_distribute_id`,
@@ -19,6 +19,7 @@ const TABLE_COLUMN = [
 
 /**
  * 获取表名
+ * 停留时长分布表不分表
  * @param {number} projectId 项目id
  * @param {number} createTimeAt 创建时间, 时间戳
  * @return {String}
@@ -28,13 +29,17 @@ function getTableName () {
 }
 
 /**
- * 自动创建&更新, 并增加total_stay_ms的值
+ * 自动创建或更新停留时长分布记录
+ * 逻辑：
+ * 1. 根据 projectId, count_at_time, count_type 查找记录
+ * 2. 若存在，更新 total_stay_ms, total_uv 及关联的城市分布数据
+ * 3. 若不存在，先插入城市分布数据，再插入主记录
  * @param {number} projectId
- * @param {number} totalStayMs
- * @param {number} totalUv
- * @param {number} countAtTime
- * @param {string} countType
- * @param {object} cityDistribute
+ * @param {number} totalStayMs 总停留时长
+ * @param {number} totalUv 总UV
+ * @param {number} countAtTime 统计时间点
+ * @param {string} countType 统计粒度
+ * @param {object} cityDistribute 城市分布数据
  * @return {boolean}
  */
 async function replaceUvRecord (projectId, totalStayMs, totalUv, countAtTime, countType, cityDistribute) {
@@ -97,6 +102,13 @@ async function replaceUvRecord (projectId, totalStayMs, totalUv, countAtTime, co
   return isSuccess
 }
 
+/**
+ * 获取停留时长分布记录列表
+ * @param {*} projectId
+ * @param {*} startAt
+ * @param {*} finishAt
+ * @param {*} countType
+ */
 async function getRecordList (projectId, startAt, finishAt, countType) {
   let tableName = getTableName()
   let countAtTimeList = []

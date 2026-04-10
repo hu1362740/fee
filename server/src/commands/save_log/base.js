@@ -254,7 +254,7 @@ class SaveLogBase extends Base {
     let currentAt = moment().unix() // ← 当前服务器时间
     let logCreateAt = this.parseLogCreateAt(data) // ← 日志中的时间
     
-    // 时间合法性校验：如果日志时间与当前服务器时间相差超过 10 天，视为异常数据丢弃
+    // 时间合法性校验：如果日志时间（客户端发生时间,用户行为发生的时间）与当前服务器时间相差超过 10 天，视为异常数据丢弃
     // Kafka 中通常只保留近期数据，过大偏差可能意味着时钟错误或脏数据
     if (Math.abs(logCreateAt - currentAt) > 864000) {
       this.log('入库时间超出阈值, 自动跳过 finialTimeAt=>', logCreateAt)

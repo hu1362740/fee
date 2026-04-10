@@ -50,7 +50,7 @@ class ParseUV extends ParseBase {
     // 提取公共信息中的 uuid
     let commonInfo = _.get(record, ['common'], {})
     let uuid = _.get(commonInfo, ['uuid'], '')
-    // 提取访问时间戳
+    // 提取访问时间戳，用户行为发生的时间
     let visitAt = _.get(record, ['time'], 0)
     // 提取项目ID
     let projectId = _.get(record, ['project_id'], 0)

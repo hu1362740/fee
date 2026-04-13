@@ -26,6 +26,13 @@ const COUNT_BY_HOUR_DATE_FORMAT = DATE_FORMAT.DATABASE_BY_HOUR
  * 2. 校验停留时长合理性 (0 ~ 2小时)
  * 3. 按小时、地理位置聚合停留时长 (ms)
  * 4. 结合 UV 数据，写入停留时长分布表
+ * 
+ * this.projectMap 数据结构说明:
+ * Map<projectId, Map<countAtTime, distribution>>
+ * - projectId: 项目ID (Number)
+ * - countAtTime: 统计时间点，格式为 'YYYY-MM-DD HH' (String)
+ * - distribution: 城市分布对象，结构为 { [country]: { [province]: { [city]: totalDurationMs } } }
+ *   例如: { 'China': { 'Guangdong': { 'Shenzhen': 12000 } } }
  */
 class TimeOnSiteByHour extends ParseBase {
   static get signature () {
@@ -91,33 +98,49 @@ class TimeOnSiteByHour extends ParseBase {
    * 2. 按小时格式化时间
    * 3. 构建嵌套结构: Map<projectId, Map<countAtTime, distribution>>
    * 4. distribution 是一个以 [country, province, city] 为路径的对象，值为累计的停留时长(ms)
-   * @param {Object} record
+   * @param {Object} record -原始日志记录对象
+   * @return {Boolean} - 处理是否成功
    */
   async processRecordAndCacheInProjectMap (record) {
+    // 提取项目ID
     let projectId = _.get(record, ['project_id'], 0)
+    // 提取停留时长(毫秒)
     let durationMs = _.get(record, ['detail', 'duration_ms'], 0)
+    // 提取地理位置信息
     let country = _.get(record, ['country'], '')
     let province = _.get(record, ['province'], '')
     let city = _.get(record, ['city'], '')
+    // 提取记录时间戳
     let recordAt = _.get(record, ['time'], 0)
 
+    //将时间戳格式化为数据库存储用的小时字符串 (例如: "2023-10-27 10")
     let countAtTime = moment.unix(recordAt).format(COUNT_BY_HOUR_DATE_FORMAT)
+    // 构建地理位置路径数组，用于 lodash set/get 操作
     let distributionPath = [country, province, city]
 
     let countAtMap = new Map()
     let distribution = {}
+    // 检查 projectMap 中是否已存在该 projectId
     if (this.projectMap.has(projectId)) {
+      // 获取该项目对应的时间点 Map
       countAtMap = this.projectMap.get(projectId)
+      // 检查该时间点 Map 中是否已存在当前小时
       if (countAtMap.has(countAtTime)) {
+        // 获取该小时对应的城市分布对象
         distribution = countAtMap.get(countAtTime)
+        // 检查该地理位置是否已有累计时长
         if (_.has(distribution, distributionPath)) {
+          // 如果存在，获取旧的时长并累加
           let oldDurationMs = _.get(distribution, distributionPath, 0)
           durationMs = durationMs + oldDurationMs
         }
       }
     }
+    // 将累加后的时长设置到分布对象中
     _.set(distribution, distributionPath, durationMs)
+    // 更新时间点 Map
     countAtMap.set(countAtTime, distribution)
+    // 更新项目 Map
     this.projectMap.set(projectId, countAtMap)
     return true
   }

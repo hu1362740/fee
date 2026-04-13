@@ -7,6 +7,11 @@ import Logger from '~/src/library/logger'
 import MCityDistribution from '~/src/model/parse/city_distribution'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+/**
+ * 操作系统统计模型 (System OS Summary)
+ * 负责按月统计各项目的操作系统（OS）及版本分布情况。
+ * 数据源来自 t_o_system_collection_{projectId} 表，结果存入 t_r_system_os 表。
+ */
 const BASE_TABLE_NAME = 't_r_system_os'
 const TABLE_COLUMN = [
   `id`,
@@ -30,6 +35,15 @@ function getTableName() {
   return BASE_TABLE_NAME
 }
 
+/**
+ * 执行操作系统统计汇总
+ * 逻辑：
+ * 1. 遍历所有项目
+ * 2. 从系统采集表中查询指定月份数据，按 os, os_version 和地理位置分组
+ * 3. 内存聚合相同 OS 版本的计数和分布
+ * 4. 写入汇总表
+ * @param {number} visitAt 统计参考时间戳
+ */
 async function summarySystemOs(visitAt) {
   let visitAtMonth = moment.unix(visitAt).format(DATE_FORMAT.DATABASE_BY_MONTH)
   const projectList = await MProject.getList()
@@ -62,6 +76,7 @@ async function summarySystemOs(visitAt) {
       let distribution = {}
       let distributionPath = [country, province, city]
       _.set(distribution, distributionPath, totalCount)
+      // 组合 OS 名称和版本作为唯一键
       let osAndOsVersion = os + osVersion
       if (_.has(osAndOsversionRecord, osAndOsVersion)) {
         // 若是已经有，更新count/distribution
@@ -95,11 +110,9 @@ async function summarySystemOs(visitAt) {
 }
 
 /**
- * 自动创建&更新, 并增加total_count的值
+ * 自动创建或更新 OS 记录
  * @param {number} projectId
- * @param {number} totalCount
- * @param {number} countAtMonth
- * @param {string} countType
+ * @param {object} recordInfo 包含 totalCount, os, osVersion, countAtMonth
  * @param {object} cityDistribute
  * @return {boolean}
  */

@@ -7,6 +7,11 @@ import Logger from '~/src/library/logger'
 import MCityDistribution from '~/src/model/parse/city_distribution'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+/**
+ * 设备类型统计模型 (System Device Summary)
+ * 负责按月统计各项目的设备厂商(Device Vendor)和型号(Device Model)分布情况。
+ * 数据源来自 t_o_system_collection_{projectId} 表，结果存入 t_r_system_device 表。
+ */
 const BASE_TABLE_NAME = 't_r_system_device'
 const TABLE_COLUMN = [
   `id`,
@@ -30,6 +35,15 @@ function getTableName () {
   return BASE_TABLE_NAME
 }
 
+/**
+ * 执行设备类型统计汇总
+ * 逻辑：
+ * 1. 遍历所有项目
+ * 2. 查询指定月份数据，按 device_vendor, device_model 和地理位置分组
+ * 3. 内存聚合同一设备型号的计数和分布
+ * 4. 写入汇总表
+ * @param {number} visitAt 统计参考时间戳
+ */
 async function summarySystemDevice (visitAt) {
   let visitAtMonth = moment.unix(visitAt).format(DATE_FORMAT.DATABASE_BY_MONTH)
   const projectList = await MProject.getList()
@@ -63,6 +77,7 @@ async function summarySystemDevice (visitAt) {
       let distribution = {}
       let distributionPath = [country, province, city]
       _.set(distribution, distributionPath, totalCount)
+      // 组合厂商和型号作为唯一键
       let deviceVersionKey = deviceModel + deviceVendor
       if (_.has(deviceVersionRecord, deviceVersionKey)) {
         // 若是已经有，更新count/distribution
@@ -96,11 +111,9 @@ async function summarySystemDevice (visitAt) {
 }
 
 /**
- * 自动创建&更新, 并增加total_count的值
+ * 自动创建或更新设备记录
  * @param {number} projectId
- * @param {number} totalCount
- * @param {number} countAtMonth
- * @param {string} countType
+ * @param {object} recordInfo 包含 totalCount, deviceVendor, deviceModel, countAtMonth
  * @param {object} cityDistribute
  * @return {boolean}
  */

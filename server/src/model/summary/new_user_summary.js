@@ -3,6 +3,12 @@ import moment from 'moment'
 import _ from 'lodash'
 import MCityDistribution from '~/src/model/parse/city_distribution'
 import Logger from '~/src/library/logger'
+
+/**
+ * 新增用户统计模型 (New User Summary)
+ * 负责统计指定时间粒度（小时/天/月）内的新增用户数及其城市分布。
+ * 数据通常由 Summary:NewUser 命令从 t_o_user_first_login_at 表聚合而来，存入 t_r_new_user_summary 表。
+ */
 const BASE_TABLE_NAME = 't_r_new_user_summary'
 const TABLE_COLUMN = [
   `id`,
@@ -23,6 +29,19 @@ function getTableName () {
   return `${BASE_TABLE_NAME}`
 }
 
+/**
+ * 替换或插入新增用户汇总记录
+ * 逻辑：
+ * 1. 检查是否存在对应 projectId, count_at_time, count_type 的记录
+ * 2. 若存在：更新总人数(total_count)和城市分布
+ * 3. 若不存在：插入新的城市分布记录，然后插入主记录
+ * @param {number} projectId
+ * @param {number} totalCount 新增用户总数
+ * @param {number} countAtTime 统计时间点
+ * @param {string} countType 统计粒度
+ * @param {object} cityDistribute 城市分布数据
+ * @return {boolean}
+ */
 async function replaceInto (projectId, totalCount, countAtTime, countType, cityDistribute) {
   let tableName = getTableName()
   let updateAt = moment().unix()
@@ -80,6 +99,14 @@ async function replaceInto (projectId, totalCount, countAtTime, countType, cityD
   return isSuccess
 }
 
+/**
+ * 获取新增用户分布记录列表
+ * 用于前端展示趋势图或详细分布
+ * @param {number} projectId
+ * @param {string} countType
+ * @param {Array} timeList 时间列表
+ * @return {Array}
+ */
 async function getNewUserDistribution (projectId, countType, timeList) {
   const tableName = getTableName()
   let rawRecordList = Knex

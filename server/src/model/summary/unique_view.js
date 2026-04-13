@@ -7,6 +7,11 @@ import DatabaseUtil from '~/src/library/utils/modules/database'
 import Logger from '~/src/library/logger'
 // 统计类别
 
+/**
+ * UV汇总模型 (Unique View Summary)
+ * 负责管理和操作 t_r_unique_view 表，该表存储了按不同时间粒度（小时/天/月）聚合后的独立访客数(UV)及城市分布数据。
+ * 数据来源通常由 Summary:UV 命令任务生成。
+ */
 const BASE_TABLE_NAME = 't_r_unique_view'
 const TABLE_COLUMN = [
   `id`,
@@ -30,13 +35,17 @@ function getTableName () {
 }
 
 /**
- * 自动创建/替换总uv记录
- * @param {number} projectId
- * @param {number} totalCount
- * @param {number} countAtTime
- * @param {string} countType
- * @param {object} cityDistribute
- * @return {boolean}
+ * 自动创建或替换 UV 汇总记录
+ * 逻辑：
+ * 1. 根据 projectId, count_at_time, count_type 查找是否存在记录
+ * 2. 若存在：更新总UV数(total_count)，并更新关联的城市分布详情(city_distribute_id指向的数据)
+ * 3. 若不存在：先插入城市分布JSON到 t_r_city_distribution 表，获取ID后，再插入主记录
+ * @param {number} projectId 项目ID
+ * @param {number} totalCount 该时间窗口内的去重UV总数
+ * @param {number} countAtTime 统计时间点格式化字符串 (如 '2023-10-27')
+ * @param {string} countType 统计粒度 (hour/day/month)
+ * @param {object} cityDistribute 城市分布对象 { country: { province: { city: count } } }
+ * @return {boolean} 操作是否成功
  */
 async function replaceUvRecord (projectId, totalCount, countAtTime, countType, cityDistribute) {
   let tableName = getTableName()
@@ -97,7 +106,11 @@ async function replaceUvRecord (projectId, totalCount, countAtTime, countType, c
 }
 
 /**
- * 获取记录
+ * 获取单条 UV 汇总记录
+ * @param {number} projectId
+ * @param {string} countAtTime
+ * @param {string} countType
+ * @return {object}
  */
 async function getRecord (projectId, countAtTime, countType) {
   let tableName = getTableName()
@@ -114,7 +127,7 @@ async function getRecord (projectId, countAtTime, countType) {
 }
 
 /**
- * 获取总uv, 记录不存在返回0
+ * 获取指定时间粒度的总 UV 数，若记录不存在则返回 0
  * @param {number} projectId
  * @param {string} countAtTime
  * @param {string} countType
@@ -126,11 +139,12 @@ async function getTotalUv (projectId, countAtTime, countType) {
 }
 
 /**
- * 获取一段时间范围内的uv数
- * @param {*} projectId
- * @param {*} startAt
- * @param {*} finishAt
- * @returns {Number}
+ * 获取一段时间范围内的 UV 总和
+ * 注意：此方法目前硬编码查询 count_type 为 HOUR 的记录进行累加，适用于从小时数据聚合到天/月的场景
+ * @param {number} projectId
+ * @param {number} startAt 开始时间戳
+ * @param {number} finishAt 结束时间戳
+ * @returns {Number} 累计 UV 数
  */
 async function getUVInRange (projectId, startAt, finishAt) {
   let startAtMoment = moment.unix(startAt).format(DATE_FORMAT.DATABASE_BY_HOUR)
@@ -149,6 +163,15 @@ async function getUVInRange (projectId, startAt, finishAt) {
   return totalUV
 }
 
+/**
+ * 获取指定时间范围内、指定粒度的原始记录列表
+ * 用于二次聚合计算（例如：从天聚合到月时，先获取所有天的记录）
+ * @param {number} projectId
+ * @param {number} startAt
+ * @param {number} endAt
+ * @param {string} countType 期望获取的记录粒度
+ * @return {Array}
+ */
 async function getRawRecordListInRange (projectId, startAt, endAt, countType) {
   let timeList = DatabaseUtil.getDatabaseTimeList(startAt, endAt, countType)
   let tableName = getTableName(projectId, startAt)

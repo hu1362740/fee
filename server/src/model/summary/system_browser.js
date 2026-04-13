@@ -7,6 +7,11 @@ import Logger from '~/src/library/logger'
 import MCityDistribution from '~/src/model/parse/city_distribution'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+/**
+ * 浏览器统计模型 (System Browser Summary)
+ * 负责按月统计各项目的浏览器(Browser)及版本分布情况。
+ * 数据源来自 t_o_system_collection_{projectId} 表，结果存入 t_r_system_browser 表。
+ */
 const BASE_TABLE_NAME = 't_r_system_browser'
 const TABLE_COLUMN = [
   `id`,
@@ -30,6 +35,15 @@ function getTableName() {
   return BASE_TABLE_NAME
 }
 
+/**
+ * 执行浏览器统计汇总
+ * 逻辑：
+ * 1. 遍历所有项目
+ * 2. 查询指定月份数据，按 browser, browser_version 和地理位置分组
+ * 3. 内存聚合同一浏览器版本的计数和分布
+ * 4. 写入汇总表
+ * @param {number} visitAt 统计参考时间戳
+ */
 async function summarySystemBrowser(visitAt) {
   let visitAtMonth = moment.unix(visitAt).format(DATE_FORMAT.DATABASE_BY_MONTH)
   const projectList = await MProject.getList()
@@ -62,6 +76,7 @@ async function summarySystemBrowser(visitAt) {
       let distribution = {}
       let distributionPath = [country, province, city]
       _.set(distribution, distributionPath, totalCount)
+      // 组合浏览器名称和版本作为唯一键
       let browserAndVersion = browser + browserVersion
       if (_.has(browserVersionRecord, browserAndVersion)) {
         // 若是已经有，更新count/distribution
@@ -95,11 +110,9 @@ async function summarySystemBrowser(visitAt) {
 }
 
 /**
- * 自动创建&更新, 并增加total_count的值
+ * 自动创建或更新浏览器记录
  * @param {number} projectId
- * @param {number} totalCount
- * @param {number} countAtMonth
- * @param {string} countType
+ * @param {object} recordInfo 包含 totalCount, browser, browserVersion, countAtMonth
  * @param {object} cityDistribute
  * @return {boolean}
  */

@@ -7,6 +7,11 @@ import Logger from '~/src/library/logger'
 import MCityDistribution from '~/src/model/parse/city_distribution'
 import DATE_FORMAT from '~/src/constants/date_format'
 
+/**
+ * 运行时版本统计模型 (System Runtime Version Summary)
+ * 负责按月统计各项目的运行时版本（如 Node.js, Java, Python 等版本）分布情况。
+ * 数据源来自 t_o_system_collection_{projectId} 表，结果存入 t_r_system_runtime_version 表。
+ */
 const BASE_TABLE_NAME = 't_r_system_runtime_version'
 const TABLE_COLUMN = [
   `id`,
@@ -28,6 +33,15 @@ function getTableName () {
   return BASE_TABLE_NAME
 }
 
+/**
+ * 执行运行时版本统计汇总
+ * 逻辑：
+ * 1. 遍历所有项目
+ * 2. 从系统采集表中查询指定月份的数据，按 runtime_version 和地理位置分组计数
+ * 3. 在内存中合并相同版本的计数和城市分布
+ * 4. 调用 replaceAndAutoIncreaseRuntimeVersionRecord 写入汇总表
+ * @param {number} visitAt 统计参考时间戳（用于确定月份）
+ */
 async function sumarySystemRuntimeVersion (visitAt) {
   let visitAtMonth = moment.unix(visitAt).format(DATE_FORMAT.DATABASE_BY_MONTH)
   const projectList = await MProject.getList()
@@ -60,11 +74,13 @@ async function sumarySystemRuntimeVersion (visitAt) {
       let distribution = {}
       let distributionPath = [country, province, city]
       _.set(distribution, distributionPath, totalCount)
+      // 以版本号作为 Key 进行内存聚合
       if (_.has(runtimeVersionRecord, runtimeVersion)) {
         // 若是已经有，更新count/distribution
         let oldCount = _.get(runtimeVersionRecord, [runtimeVersion, 'totalCount'], 0)
         let newCount = oldCount + totalCount
         let oldDistribution = _.get(runtimeVersionRecord, [runtimeVersion, 'distribution'], {})
+        // 合并城市分布数据
         let cityDistribute = MCityDistribution.mergeDistributionData(distribution, oldDistribution, (newCityRecord, oldCityRecord) => { return newCityRecord + oldCityRecord })
         _.set(runtimeVersionRecord, [runtimeVersion, 'totalCount'], newCount)
         _.set(runtimeVersionRecord, [runtimeVersion, 'distribution'], cityDistribute)
@@ -92,12 +108,11 @@ async function sumarySystemRuntimeVersion (visitAt) {
 }
 
 /**
- * 自动创建&更新, 并增加total_count的值
+ * 自动创建或更新运行时版本记录
+ * 若记录存在则更新总数和城市分布；若不存在则新建记录并关联城市分布数据
  * @param {number} projectId
- * @param {number} totalCount
- * @param {number} countAtMonth
- * @param {string} countType
- * @param {object} cityDistribute
+ * @param {object} recordInfo 包含 totalCount, runtimeVersion, countAtMonth
+ * @param {object} cityDistribute 城市分布数据
  * @return {boolean}
  */
 async function replaceAndAutoIncreaseRuntimeVersionRecord (projectId, recordInfo, cityDistribute) {

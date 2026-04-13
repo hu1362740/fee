@@ -132,6 +132,9 @@ async function getCityDistributeInRange (projectId, startAt, finishAt) {
   // uv记录表按月分表, 因此需要分月计算总uv
   for (let currentAtMoment = startAtMoment; currentAtMoment.isBefore(finishAtMoment); currentAtMoment = currentAtMoment.clone().add(1, 'months')) {
     let tableName = getTableName(projectId, startAt)
+    //     groupBy：将数据切分成不同的地理块。SQL 返回的结果类似于：
+    // { country: 'China', province: 'Guangdong', city: 'Shenzhen', uv_count: 50 }
+    // { country: 'China', province: 'Beijing', city: 'Beijing', uv_count: 30 }
     let rawRecordList = await Knex
       .countDistinct('uuid as uv_count')
       .select([`country`, `province`, `city`])

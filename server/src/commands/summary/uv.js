@@ -141,13 +141,14 @@ class UVSummary extends Base {
       }
     }
     this.log(`[${projectId}(${projectDesc})] 城市分布数据获取完毕 =>`, cityDistribute, `totalUv => ${totalUv}将记录更新到数据库中`)
-    // 写入或更新汇总表
+    // 写入或更新 UV 汇总表 (t_r_unique_view)
+    // 该操作会将当前统计粒度（天/月）的聚合结果持久化，包括总UV数和合并后的城市分布JSON
     MUniqueView.replaceUvRecord(
-      projectId,
-      totalUv,
-      countAtMoment.format(DATE_FORMAT.DATABASE_BY_UNIT[countType]),
-      countType,
-      cityDistribute
+      projectId,          // 项目ID
+      totalUv,            // 该时间窗口内去重后的独立访客总数 (Total Unique Visitors)
+      countAtMoment.format(DATE_FORMAT.DATABASE_BY_UNIT[countType]), // 统计时间点格式化字符串 (如: '2023-10-27' 或 '2023-10')
+      countType,          // 统计粒度类型 ('day' 或 'month')
+      cityDistribute      // 合并后的城市分布对象，结构为 { country: { province: { city: count } } }
     )
   }
 

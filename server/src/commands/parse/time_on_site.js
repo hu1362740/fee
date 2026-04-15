@@ -165,7 +165,7 @@ class TimeOnSiteByHour extends ParseBase {
         for (let record of recordList) {
           totalStayMs = totalStayMs + record
         }
-
+        // 获取总人数
         let totalUv = await MUniqueView.getTotalUv(projectId, countAtTime, COUNT_TYPE_HOUR)
         let isSuccess = await MDurationDistribution.replaceUvRecord(projectId, totalStayMs, totalUv, countAtTime, COUNT_TYPE_HOUR, distribution)
         processRecordCount = processRecordCount + 1

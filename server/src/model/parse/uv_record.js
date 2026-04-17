@@ -25,7 +25,7 @@ const TABLE_COLUMN = [
  * @param {number} createTimeAt 创建时间, 时间戳，用于确定月份
  * @return {String}
  */
-function getTableName (projectId, createTimeAt) {
+function getTableName(projectId, createTimeAt) {
   let dateYm = moment.unix(createTimeAt).format(TableNameDateFormat)
   return `${BASE_TABLE_NAME}_${projectId}_${dateYm}`
 }
@@ -44,7 +44,7 @@ function getTableName (projectId, createTimeAt) {
  * @param {string} city
  * @return {boolean} 操作是否成功
  */
-async function replaceUvRecord (projectId, uuid, visitAt, country, province, city) {
+async function replaceUvRecord(projectId, uuid, visitAt, country, province, city) {
   // pv数无意义, 不再计算
   let pvCount = 0
 
@@ -99,7 +99,7 @@ async function replaceUvRecord (projectId, uuid, visitAt, country, province, cit
  * @param {*} visitAt 访问时间戳，用于确定表和小时
  * @return {Set<String>} 已存在的UUID集合
  */
-async function getExistUuidSetInHour (projectId, visitAt) {
+async function getExistUuidSetInHour(projectId, visitAt) {
   let visitAtHour = moment.unix(visitAt).format(VisitAtHourDateFormat)
   let tableName = getTableName(projectId, visitAt)
   let rawRecordList = await Knex
@@ -125,13 +125,15 @@ async function getExistUuidSetInHour (projectId, visitAt) {
  * @param {*} finishAt 结束时间戳
  * @returns {Object} 城市分布对象，结构如 { 'China': { 'Beijing': { 'Beijing': count } } }
  */
-async function getCityDistributeInRange (projectId, startAt, finishAt) {
+async function getCityDistributeInRange(projectId, startAt, finishAt) {
   let startAtMoment = moment.unix(startAt)
   let finishAtMoment = moment.unix(finishAt)
   let cityDistribute = {}
   // uv记录表按月分表, 因此需要分月计算总uv
   for (let currentAtMoment = startAtMoment; currentAtMoment.isBefore(finishAtMoment); currentAtMoment = currentAtMoment.clone().add(1, 'months')) {
-    let tableName = getTableName(projectId, startAt)
+    let tableName = getTableName(projectId, startAt) // ❌ 始终使用 startAt 的月份，导致跨月查询时表名不正确
+    // 正确代码
+    // let tableName = getTableName(projectId, currentAtMoment.unix())  // ✅ 使用当前循环的月份
     //     groupBy：将数据切分成不同的地理块。SQL 返回的结果类似于：
     // { country: 'China', province: 'Guangdong', city: 'Shenzhen', uv_count: 50 }
     // { country: 'China', province: 'Beijing', city: 'Beijing', uv_count: 30 }

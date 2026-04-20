@@ -20,7 +20,7 @@ const TABLE_COLUMN = [
  * @param {number} projectId 项目id
  * @return {String}
  */
-function getTableName (projectId) {
+function getTableName(projectId) {
   return `${BASE_TABLE_NAME}_${projectId}`
 }
 
@@ -31,7 +31,7 @@ function getTableName (projectId) {
  * @param {number} endAt 结束时间戳
  * @return {Array}
  */
-async function getList (projectId, startAt, endAt) {
+async function getList(projectId, startAt, endAt) {
   let tableName = getTableName(projectId)
   let recordList = await Knex
     .select(TABLE_COLUMN)
@@ -58,7 +58,7 @@ async function getList (projectId, startAt, endAt) {
  * @param {string} city
  * @return {boolean} 操作是否成功
  */
-async function replaceInto (projectId, ucid, firstVisitAt, country, province, city) {
+async function replaceInto(projectId, ucid, firstVisitAt, country, province, city) {
   let tableName = getTableName(projectId)
   let updateAt = moment().unix()
   // 返回值是一个列表
@@ -98,6 +98,7 @@ async function replaceInto (projectId, ucid, firstVisitAt, country, province, ci
       .insert(data)
       .into(tableName)
       .catch(e => {
+        console.log(`ERROR: Insert failed for ucid ${ucid}. Message: ${e.message}`);
         return []
       })
     let insertId = _.get(insertResult, [0], 0)
@@ -113,7 +114,7 @@ async function replaceInto (projectId, ucid, firstVisitAt, country, province, ci
  * @param {*} allUcidList 待检查的UCID列表
  * @returns {Set<String>} 已存在的UCID集合
  */
-async function filterExistUcidSetInDb (projectId, allUcidList) {
+async function filterExistUcidSetInDb(projectId, allUcidList) {
   let tableName = getTableName(projectId)
   let rawRecordList = await Knex
     .select('ucid')

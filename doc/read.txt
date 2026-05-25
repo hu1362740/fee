@@ -1,0 +1,22 @@
+1、请在该项目根目录新建个doc文件夹。
+2、请深入阅读​该项目代码，熟悉整个项目，你可以链接这个项目所有你需要的文件，不必着急回答。在你深入阅读，分析代码后，把你相关心得及上下文写在该项目docx文件夹下（可以写多个文件），（我后面或在其他session中会问你该项目的问题或让你帮忙直接改写代码）以后你在其他session中就可以从docx读取相关信息或上下文，不必重新反复阅读了
+3、请回答这样做是不是会好些
+
+完成。以下是总结：
+
+完成情况
+1. 创建了 doc/ 文件夹，写入 5 个文档文件：
+文件	内容
+@d:\mywork\demo\fee-pro\doc\01_项目总览.md	项目定位、三大模块、技术栈、数据流总览、启动命令、配置文件速查
+@d:\mywork\demo\fee-pro\doc\02_Server端架构详解.md	Express 应用、路由系统、权限认证、命令继承体系、Task:Manager 调度周期、数据库分表策略
+@d:\mywork\demo\fee-pro\doc\03_SDK埋点详解.md	打点 1px 图片机制、logInfo 结构、type/code 规范、初始化配置、自动监控原理、主动上报 API
+@d:\mywork\demo\fee-pro\doc\04_Client前端架构详解.md	Vue 目录结构、路由守卫逻辑、页面功能一览、API 响应格式、设备 UUID 机制
+@d:\mywork\demo\fee-pro\doc\05_数据库表结构与分表策略.md	所有核心表字段详解、分表规则、建表命令、常用 SQL 示例
+@d:\mywork\demo\fee-pro\doc\06_常见问题与开发注意事项.md	已知 Bug（parseNginxLog 未 await、Token 硬编码 salt）、Windows 兼容问题、开发命令速查、代码修改注意点
+2. 回答第3个问题
+这样做确实会好很多，原因：
+
+有效：我的记忆在每个 session 开始时无法保证被检索到（本次对话就出现了"No MEMORIES retrieved"），但 doc/ 文件夹是持久化在代码仓库里的，我下个 session 可以用一次 list_dir + 几次 read_file 就获得完整上下文，比重新读几十个源码文件快得多。
+比 memory 更可靠：Memory 系统有检索失败的风险，而文件系统总是存在的。
+可供团队共享：不只是 AI，你自己或其他开发者也能快速查阅这些文档。
+唯一代价：文档会随代码修改而逐渐过时，需要你在大改动后提醒我更新对应文档。

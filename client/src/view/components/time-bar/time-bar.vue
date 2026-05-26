@@ -130,7 +130,8 @@ export default {
       options3: {
         disabledDate (date) {
           let initdate = Date.now() - 7 * 24 * 60 * 60 * 1000
-          return (date && date.valueOf() < initdate) || (date && date.valueOf() > Date.now())
+          // return (date && date.valueOf() < initdate) || (date && date.valueOf() > Date.now())
+          return date && date.valueOf() > Date.now()
         }
       }
     }

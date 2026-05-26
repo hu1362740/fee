@@ -242,7 +242,7 @@ export default {
         isEnable: 1,
         note: params.note
       })
-      this.$Message.info(res.msg)
+      if (res) this.$Message.info(res.msg)
     },
     // 获取报警配置列表
     async getAlarmList (params) {
@@ -269,7 +269,7 @@ export default {
         isEnable: params.is_enable,
         note: params.note
       })
-      this.$Message.info(result.msg)
+      if (result) this.$Message.info(result.msg)
     },
     // 获取err_name
     async getAlarmErrorNameList () {
@@ -293,7 +293,7 @@ export default {
       const result = await Alarm.remove({
         id: params.row.id
       })
-      this.$Message.info(result.msg)
+      if (result) this.$Message.info(result.msg)
       this.getAlarmList()
     },
     // 新增回调

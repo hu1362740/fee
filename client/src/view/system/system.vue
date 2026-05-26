@@ -23,11 +23,7 @@
               <Col span="12">
                 <Card :bordered="false">
                   <p slot="title">浏览器占比</p>
-                  <ve-pie
-                    :data="browserPieData"
-                    :settings="pieSettings"
-                    height="360px"
-                  ></ve-pie>
+                  <div ref="browserPieChart" style="height: 360px;"></div>
                 </Card>
               </Col>
               <Col span="12">
@@ -43,12 +39,7 @@
                       <Option v-for="b in browserList" :key="b" :value="b">{{ b }}</Option>
                     </Select>
                   </p>
-                  <ve-bar
-                    :data="browserVersionData"
-                    :settings="browserVersionBarSettings"
-                    :extend="barExtend"
-                    height="360px"
-                  ></ve-bar>
+                  <div ref="browserVersionChart" style="height: 360px;"></div>
                 </Card>
               </Col>
             </Row>
@@ -66,11 +57,7 @@
               <Col span="12">
                 <Card :bordered="false">
                   <p slot="title">操作系统占比</p>
-                  <ve-pie
-                    :data="osPieData"
-                    :settings="pieSettings"
-                    height="360px"
-                  ></ve-pie>
+                  <div ref="osPieChart" style="height: 360px;"></div>
                 </Card>
               </Col>
               <Col span="12">
@@ -92,11 +79,7 @@
               <Col span="12">
                 <Card :bordered="false">
                   <p slot="title">设备厂商占比</p>
-                  <ve-pie
-                    :data="devicePieData"
-                    :settings="pieSettings"
-                    height="360px"
-                  ></ve-pie>
+                  <div ref="devicePieChart" style="height: 360px;"></div>
                 </Card>
               </Col>
               <Col span="12">
@@ -121,8 +104,7 @@
 <script>
 import moment from 'moment'
 import _ from 'lodash'
-import VePie from 'v-charts/lib/pie.common'
-import VeBar from 'v-charts/lib/bar.common'
+import echarts from 'echarts'
 import {
   getOsDistribution,
   getBrowserList,
@@ -131,39 +113,66 @@ import {
   getDeviceDistribution
 } from '@/api/system'
 
+const PIE_OPTION = (data, title) => ({
+  tooltip: {
+    trigger: 'item',
+    formatter: '{b}: {c} ({d}%)'
+  },
+  legend: {
+    type: 'scroll',
+    orient: 'vertical',
+    right: 10,
+    top: 20,
+    bottom: 20
+  },
+  series: [{
+    name: title,
+    type: 'pie',
+    radius: ['0%', '65%'],
+    center: ['40%', '50%'],
+    data: data,
+    label: { formatter: '{b}\n{d}%' },
+    emphasis: {
+      itemStyle: {
+        shadowBlur: 10,
+        shadowOffsetX: 0,
+        shadowColor: 'rgba(0, 0, 0, 0.5)'
+      }
+    }
+  }]
+})
+
+const BAR_OPTION = (data) => ({
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  grid: { left: '3%', right: '8%', bottom: '3%', containLabel: true },
+  xAxis: { type: 'value' },
+  yAxis: {
+    type: 'category',
+    data: data.map(item => item.name),
+    axisLabel: { interval: 0 }
+  },
+  series: [{
+    type: 'bar',
+    data: data.map(item => item.value),
+    label: { show: true, position: 'right' }
+  }]
+})
+
 export default {
   name: 'system',
-  components: {
-    VePie,
-    VeBar
-  },
   data () {
     return {
       activeTab: 'browser',
       currentMonth: moment().format('YYYY-MM'),
 
-      pieSettings: {
-        roseType: false,
-        radius: '60%',
-        offsetY: '50%'
-      },
-
-      barExtend: {
-        xAxis: {
-          axisLabel: { show: true, interval: 0 }
-        }
-      },
-
-      browserVersionBarSettings: {
-        metrics: ['数量'],
-        dimension: ['版本']
-      },
+      // echarts 实例
+      chartInstances: {},
 
       // 浏览器
       browserList: [],
       selectedBrowser: '',
-      browserPieData: { columns: ['名称', '数量'], rows: [] },
-      browserVersionData: { columns: ['版本', '数量'], rows: [] },
+      browserPieRawData: [],
+      browserVersionRawData: [],
       browserRankColumns: [
         { title: '排名', type: 'index', align: 'center', width: 70 },
         { title: '浏览器', key: 'browser', align: 'center' },
@@ -172,7 +181,7 @@ export default {
       browserRankData: [],
 
       // 操作系统
-      osPieData: { columns: ['系统', '数量'], rows: [] },
+      osPieRawData: [],
       osColumns: [
         { title: '排名', type: 'index', align: 'center', width: 70 },
         { title: '系统', key: 'os', align: 'center' },
@@ -182,7 +191,7 @@ export default {
       osTableData: [],
 
       // 设备
-      devicePieData: { columns: ['厂商', '数量'], rows: [] },
+      devicePieRawData: [],
       deviceColumns: [
         { title: '排名', type: 'index', align: 'center', width: 70 },
         { title: '厂商', key: 'device_vendor', align: 'center' },
@@ -194,6 +203,26 @@ export default {
   },
 
   methods: {
+    getOrInitChart (refName) {
+      if (!this.$refs[refName]) return null
+      if (!this.chartInstances[refName]) {
+        this.chartInstances[refName] = echarts.init(this.$refs[refName])
+      }
+      return this.chartInstances[refName]
+    },
+
+    renderPieChart (refName, data, title) {
+      const chart = this.getOrInitChart(refName)
+      if (!chart) return
+      chart.setOption(PIE_OPTION(data, title), true)
+    },
+
+    renderBarChart (refName, data) {
+      const chart = this.getOrInitChart(refName)
+      if (!chart) return
+      chart.setOption(BAR_OPTION(data), true)
+    },
+
     onMonthChange (month) {
       this.currentMonth = month
       this.loadTabData(this.activeTab)
@@ -201,6 +230,18 @@ export default {
 
     onTabChange (name) {
       this.loadTabData(name)
+      this.$nextTick(() => {
+        const refMap = {
+          browser: ['browserPieChart', 'browserVersionChart'],
+          os: ['osPieChart'],
+          device: ['devicePieChart']
+        }
+        ;(refMap[name] || []).forEach(refName => {
+          if (this.chartInstances[refName]) {
+            this.chartInstances[refName].resize()
+          }
+        })
+      })
     },
 
     loadTabData (tab) {
@@ -216,54 +257,54 @@ export default {
     async loadBrowserData () {
       const params = { month: this.currentMonth }
 
-      // 1. 获取浏览器列表
-      const listRes = await getBrowserList(params)
+      const [listRes, allRes] = await Promise.all([
+        getBrowserList(params),
+        getBrowserDistributionByVersion(params)
+      ])
+
       this.browserList = _.get(listRes, ['data'], [])
       if (this.browserList.length > 0 && !this.selectedBrowser) {
         this.selectedBrowser = this.browserList[0]
       }
 
-      // 2. 获取全部浏览器版本数据，聚合成浏览器占比饼图 + 排名表
-      const allRes = await getBrowserDistributionByVersion(params)
       const allList = _.get(allRes, ['data'], [])
-
       const browserMap = {}
       for (let item of allList) {
         const browser = item.browser || '未知'
         browserMap[browser] = (browserMap[browser] || 0) + Number(item.total_count)
       }
 
-      this.browserPieData = {
-        columns: ['名称', '数量'],
-        rows: Object.keys(browserMap)
-          .map(name => ({ '名称': name, '数量': browserMap[name] }))
-          .sort((a, b) => b['数量'] - a['数量'])
-      }
+      this.browserPieRawData = Object.keys(browserMap)
+        .map(name => ({ name, value: browserMap[name] }))
+        .sort((a, b) => b.value - a.value)
 
-      this.browserRankData = Object.keys(browserMap)
-        .map(name => ({ browser: name, total_count: browserMap[name] }))
-        .sort((a, b) => b.total_count - a.total_count)
+      this.browserRankData = this.browserPieRawData
+        .map(item => ({ browser: item.name, total_count: item.value }))
 
-      // 3. 加载当前选中浏览器的版本分布
       if (this.selectedBrowser) {
         await this.loadBrowserVersionData(this.selectedBrowser)
       }
+
+      this.$nextTick(() => {
+        this.renderPieChart('browserPieChart', this.browserPieRawData, '浏览器')
+        this.renderBarChart('browserVersionChart', this.browserVersionRawData)
+      })
     },
 
     async onBrowserChange (browser) {
       this.selectedBrowser = browser
       await this.loadBrowserVersionData(browser)
+      this.$nextTick(() => {
+        this.renderBarChart('browserVersionChart', this.browserVersionRawData)
+      })
     },
 
     async loadBrowserVersionData (browser) {
       const res = await getBrowserDistribution({ month: this.currentMonth, q: browser })
       const list = _.get(res, ['data'], [])
-      this.browserVersionData = {
-        columns: ['版本', '数量'],
-        rows: list
-          .map(item => ({ '版本': item.name || String(item.key || ''), '数量': Number(item.value || 0) }))
-          .sort((a, b) => b['数量'] - a['数量'])
-      }
+      this.browserVersionRawData = list
+        .map(item => ({ name: String(item.key || ''), value: Number(item.value || 0) }))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
     },
 
     async loadOsData () {
@@ -271,20 +312,16 @@ export default {
       const res = await getOsDistribution(params)
       const list = _.get(res, ['data'], [])
 
-      // 按 OS 类型聚合饼图
       const osMap = {}
       for (let item of list) {
         const osName = item.type || '未知'
         osMap[osName] = (osMap[osName] || 0) + Number(item.value)
       }
-      this.osPieData = {
-        columns: ['系统', '数量'],
-        rows: Object.keys(osMap)
-          .map(name => ({ '系统': name, '数量': osMap[name] }))
-          .sort((a, b) => b['数量'] - a['数量'])
-      }
 
-      // 表格展示 OS + 版本明细
+      this.osPieRawData = Object.keys(osMap)
+        .map(name => ({ name, value: osMap[name] }))
+        .sort((a, b) => b.value - a.value)
+
       this.osTableData = list
         .map(item => ({
           os: item.type || '未知',
@@ -292,6 +329,10 @@ export default {
           total_count: Number(item.value)
         }))
         .sort((a, b) => b.total_count - a.total_count)
+
+      this.$nextTick(() => {
+        this.renderPieChart('osPieChart', this.osPieRawData, '操作系统')
+      })
     },
 
     async loadDeviceData () {
@@ -299,20 +340,16 @@ export default {
       const res = await getDeviceDistribution(params)
       const list = _.get(res, ['data'], [])
 
-      // 按设备厂商聚合饼图
       const vendorMap = {}
       for (let item of list) {
         const vendor = item.type || '未知'
         vendorMap[vendor] = (vendorMap[vendor] || 0) + Number(item.value)
       }
-      this.devicePieData = {
-        columns: ['厂商', '数量'],
-        rows: Object.keys(vendorMap)
-          .map(name => ({ '厂商': name, '数量': vendorMap[name] }))
-          .sort((a, b) => b['数量'] - a['数量'])
-      }
 
-      // 表格展示厂商 + 型号明细
+      this.devicePieRawData = Object.keys(vendorMap)
+        .map(name => ({ name, value: vendorMap[name] }))
+        .sort((a, b) => b.value - a.value)
+
       this.deviceTableData = list
         .map(item => ({
           device_vendor: item.type || '未知',
@@ -320,11 +357,21 @@ export default {
           total_count: Number(item.value)
         }))
         .sort((a, b) => b.total_count - a.total_count)
+
+      this.$nextTick(() => {
+        this.renderPieChart('devicePieChart', this.devicePieRawData, '设备厂商')
+      })
     }
   },
 
   async mounted () {
     await this.loadBrowserData()
+  },
+
+  beforeDestroy () {
+    Object.values(this.chartInstances).forEach(chart => {
+      if (chart) chart.dispose()
+    })
   }
 }
 </script>

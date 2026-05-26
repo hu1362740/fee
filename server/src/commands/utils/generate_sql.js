@@ -330,8 +330,8 @@ TABLE_TEMPLATE[SINGLE_T_O_ALARM_CONFIG] = `(
   \`is_enable\` tinyint(1) unsigned NOT NULL DEFAULT '1' COMMENT '是否开启本条报警配置1：是0：否',
   \`note\` varchar(255) NOT NULL DEFAULT '' COMMENT '配置说明',
   \`is_delete\` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '是否删除(1 => 是, 0 => 否)',
-  \`create_ucid\` varchar(20) NOT NULL DEFAULT '' COMMENT '创建此记录的人',
-  \`update_ucid\` varchar(20) NOT NULL DEFAULT '' COMMENT '更新此记录的人',
+  \`create_ucid\` varchar(50) NOT NULL DEFAULT '' COMMENT '创建此记录的人',
+  \`update_ucid\` varchar(50) NOT NULL DEFAULT '' COMMENT '更新此记录的人',
   \`create_time\` bigint(20) unsigned NOT NULL DEFAULT '0' COMMENT '创建此记录的时间',
   \`update_time\` bigint(20) unsigned NOT NULL DEFAULT '0' COMMENT '更新此记录的时间',
   PRIMARY KEY (\`id\`)

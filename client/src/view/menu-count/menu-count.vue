@@ -2,101 +2,55 @@
   <div>
     <Row style='margin-top: 20px;'>
       <Card shadow>
-        <ve-bar
-          width="auto"
-          height="600px"
-          :data="chartData"
-          :settings="chartSettings"
-          :extend="chartExtend"
-        ></ve-bar>
-
+        <div ref="barChart" style="width:100%;height:600px"></div>
       </Card>
     </Row>
   </div>
 </template>
 
 <script>
-  import VeBar from 'v-charts/lib/bar.common'
-  import InforCard from '_c/info-card'
-  import CountTo from '_c/count-to'
-  import { ChartBar, ChartPie } from '_c/charts'
+  import echarts from 'echarts'
   import { getMenuCount } from '@/api/behavior'
 
   export default {
     name: 'home',
-    components: {
-      InforCard,
-      CountTo,
-      ChartPie,
-      ChartBar,
-      VeBar
-    },
+    components: {},
     data () {
       return {
-        chartSettings: {
-          // min: [100, 300]
-          // max: [100, 300]
-          metrics: ['totalCount'],
-          dataOrder: {
-            label: 'totalCount',
-            order: 'desc'
-          },
-          labelMap: {
-            menuName: '菜单名称',
-            totalCount: 'PV'
-          }
-        },
-        chartData: {
-          columns: ['menuName', 'totalCount', 'menuCode', 'menuUrl'],
-          rows: []
-        }
+        chartInstance: null,
+        rawData: []
       }
     },
-
     mounted () {
       this.fetchData()
     },
     methods: {
-      getViewData (skey, svalue, data = []) {
-        let chartData = {
-          columns: [skey, svalue],
-          rows: []
+      renderBarChart () {
+        if (!this.$refs.barChart) return
+        if (!this.chartInstance) {
+          this.chartInstance = echarts.init(this.$refs.barChart)
         }
-        let recordList = []
-        for (let rawRecord of data) {
-          let {menuName, totalCount} = rawRecord
-          let record = {
-            [skey]: menuName,
-            [svalue]: totalCount
-          }
-          recordList.push(record)
-        }
-        chartData.rows = recordList
-        return chartData
-      },
-      async fetchData () {
-        const res = await getMenuCount()
-        this.chartData = this.getViewData('menuName', 'totalCount', res.data)
-        this.resize()
-      }
-    },
-    computed: {
-      chartExtend () {
         // 初始区域最多展示30条记录
         const MAX_DISPLAY_RECORD = 30
-        let recordListLength = this.chartData.rows.length
+        const sorted = this.rawData.slice().sort((a, b) => b.totalCount - a.totalCount)
+        const names = sorted.map(d => d.menuName)
+        const values = sorted.map(d => d.totalCount)
+        const recordListLength = names.length
         let showEndPercent = 0 // 从100 => 0
-        if (recordListLength > 0 && recordListLength > MAX_DISPLAY_RECORD) {
-          showEndPercent = 100 - (Math.floor(MAX_DISPLAY_RECORD / recordListLength * 100) % 100)
+        if (recordListLength > MAX_DISPLAY_RECORD) {
+          showEndPercent = 100 - Math.floor(MAX_DISPLAY_RECORD / recordListLength * 100) % 100
         }
-
-        return {
-          title: {
-            show: true,
-            text: '近一周菜单点击量'
+        this.chartInstance.setOption({
+          title: { show: true, text: '近一周菜单点击量' },
+          tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+          grid: { left: '3%', right: '10%', containLabel: true },
+          xAxis: { type: 'value', name: 'PV' },
+          yAxis: {
+            type: 'category',
+            data: names,
+            axisLabel: { show: true, interval: 0 }
           },
-
-          dataZoom: {
+          dataZoom: [{
             type: 'slider',
             show: true,
             yAxisIndex: [0],
@@ -104,16 +58,18 @@
             start: 100,
             end: showEndPercent,
             showDetail: false
-          },
-
-          yAxis: {
-            axisLabel: {
-              show: true,
-              interval: 0
-            }
-          }
-        }
+          }],
+          series: [{ type: 'bar', data: values, label: { show: true, position: 'right' } }]
+        }, true)
+      },
+      async fetchData () {
+        const res = await getMenuCount()
+        this.rawData = res.data || []
+        this.$nextTick(() => { this.renderBarChart() })
       }
+    },
+    beforeDestroy () {
+      if (this.chartInstance) this.chartInstance.dispose()
     }
   }
 </script>

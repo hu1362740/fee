@@ -1,6 +1,7 @@
 import Behavior from '~/src/routes/api/behavior'
 import Os from '~/src/routes/api/os'
 import Browser from '~/src/routes/api/browser'
+import Device from '~/src/routes/api/device'
 import RuntimeVersion from '~/src/routes/api/runtimeVersion'
 import ErrorReport from '~/src/routes/api/error'
 import Log from '~/src/routes/api/log'
@@ -16,6 +17,7 @@ export default {
   ...Behavior,
   ...Os,
   ...Browser,
+  ...Device,
   ...RuntimeVersion,
   ...ErrorReport,
   ...Log,

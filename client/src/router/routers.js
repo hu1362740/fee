@@ -9,6 +9,7 @@ import ViewPerformance from '@/view/performance'
 import AlarmConfig from '@/view/alarm-config/index.vue'
 import AlarmLog from '@/view/alarm-log/index.vue'
 import Management from '@/view/management/index.vue'
+import SystemEnv from '@/view/system/system.vue'
 import ErrorPage401 from '@/view/error-page/401.vue'
 import ErrorPage500 from '@/view/error-page/500.vue'
 /**
@@ -155,6 +156,26 @@ export default [
           title: '日志',
         },
         component: AlarmLog,
+      },
+    ],
+  },
+  {
+    path: '/project/:id/system',
+    name: '系统环境',
+    component: Main,
+    meta: {
+      icon: 'md-desktop',
+      title: '系统环境',
+    },
+    children: [
+      {
+        path: 'overview',
+        name: 'system-overview',
+        meta: {
+          icon: 'md-pie',
+          title: '环境分布',
+        },
+        component: SystemEnv,
       },
     ],
   },

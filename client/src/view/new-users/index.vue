@@ -14,15 +14,14 @@
                     @on-change="cityChange"
                     slot="left"></Cascader>
         </time-bar>
-        <ve-line :data="lineChartData"
-                 :extend="chartExtend"></ve-line>
+        <div ref="lineChart" style="height:350px;width:100%"></div>
       </Card>
     </Row>
     <Row>
       <Col span="14">
       <Card shadow>
         <p slot="title">省分布</p>
-        <ve-map :data="mapChartData"></ve-map>
+        <div ref="mapChart" style="height:400px;width:100%"></div>
       </Card>
       </Col>
       <Col span="10">
@@ -39,103 +38,81 @@
 <script>
 import moment from 'moment'
 import _ from 'lodash'
-import VeLine from 'v-charts/lib/line.common'
-import VeMap from 'v-charts/lib/map.common'
+import echarts from 'echarts'
+import 'echarts/map/js/china'
 import { getNewUsersByLine, getNewUsersByMap } from '@/api/behavior'
 import TimeBar from '@/view/components/time-bar'
 import city from './city'
 
 export default {
   components: {
-    VeLine,
-    TimeBar,
-    VeMap
+    TimeBar
   },
   data () {
-    this.chartExtend = {
-      // 'yAxis': {} 配置会对应设置到两个轴上，设置0对应左轴，设置1对应右轴
-      // 具体内容参考 echarts 中对于 yAxis 的配置
-      // http://echarts.baidu.com/option.html#yAxis
-      tooltip: {
-        formatter (params) {
-          if (params[0] && params[0].data) {
-            return `日期：${params[0].data[0]} </br> 人次：${params[0].data[1]}`
-          }
-        }
-      },
-      yAxis: {
-        axisLabel: {
-          formatter (val) {
-            return val
-          }
-        }
-      }
-    }
     return {
       title: '全国',
-      lineChartData: [],
       city,
       selectCity: ['全国'],
       lineTimeParam: {},
-      mapChartData: [],
+      chartInstances: {},
+      lineRawData: [],
+      mapRawData: [],
       columns: [
-        {
-          title: '排名',
-          type: 'index',
-          align: 'center'
-        },
-        {
-          title: '省份',
-          key: 'name',
-          align: 'center'
-        },
-        {
-          title: '数量',
-          key: 'value',
-          align: 'center'
-        }
+        { title: '排名', type: 'index', align: 'center' },
+        { title: '省份', key: 'name', align: 'center' },
+        { title: '数量', key: 'value', align: 'center' }
       ],
       tableData: []
     }
   },
   methods: {
-    getViewData (skey, svalue, data = []) {
-      var ret = {
-        columns: [skey, svalue],
-        rows: []
+    getOrInitChart (refName) {
+      if (!this.$refs[refName]) return null
+      if (!this.chartInstances[refName]) {
+        this.chartInstances[refName] = echarts.init(this.$refs[refName])
       }
-      data.forEach(({ key, value }) => {
-        ret.rows.push({
-          [skey]: key,
-          [svalue]: value
-        })
-      })
-      return ret
+      return this.chartInstances[refName]
     },
-
+    renderLineChart () {
+      const chart = this.getOrInitChart('lineChart')
+      if (!chart) return
+      const xData = this.lineRawData.map(d => d.key)
+      const yData = this.lineRawData.map(d => d.value)
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          formatter (params) {
+            if (params[0]) return `日期：${params[0].name}<br/>人次：${params[0].value}`
+          }
+        },
+        xAxis: { type: 'category', data: xData, axisLabel: { rotate: 30 } },
+        yAxis: { type: 'value' },
+        series: [{ type: 'line', data: yData, smooth: true }]
+      }, true)
+    },
+    renderMapChart () {
+      const chart = this.getOrInitChart('mapChart')
+      if (!chart) return
+      const maxVal = Math.max(...this.mapRawData.map(d => d.value), 1)
+      chart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+        visualMap: {
+          min: 0,
+          max: maxVal,
+          text: ['高', '低'],
+          realtime: false,
+          calculable: true,
+          inRange: { color: ['#e0f3f8', '#74add1', '#313695'] }
+        },
+        series: [{ type: 'map', map: 'china', roam: false, data: this.mapRawData }]
+      }, true)
+    },
     async dateChange (fromChildObj) {
       this.$set(this.lineTimeParam, 'st', moment(moment(fromChildObj.dateRange[0]).format('YYYY/MM/DD 00:00:00'), 'YYYY/MM/DD HH:mm:ss').unix() * 1000)
       this.$set(this.lineTimeParam, 'et', moment(moment(fromChildObj.dateRange[1]).format('YYYY/MM/DD 23:59:59'), 'YYYY/MM/DD HH:mm:ss').unix() * 1000)
       this.$set(this.lineTimeParam, 'filterBy', fromChildObj.filterBy)
       await this.getLineData()
       await this.getMapData()
-    },
-    MillisecondToDate (msd) {
-      var time = parseFloat(msd) / 1000
-      if (time != null && time !== '') {
-        if (time > 60 && time < 60 * 60) {
-          time = parseInt(time / 60.0) + '分钟' + parseInt((parseFloat(time / 60.0) -
-            parseInt(time / 60.0)) * 60) + '秒'
-        } else if (time >= 60 * 60 && time < 60 * 60 * 24) {
-          time = parseInt(time / 3600.0) + '小时' + parseInt((parseFloat(time / 3600.0) -
-            parseInt(time / 3600.0)) * 60) + '分钟' +
-            parseInt((parseFloat((parseFloat(time / 3600.0) - parseInt(time / 3600.0)) * 60) -
-              parseInt((parseFloat(time / 3600.0) - parseInt(time / 3600.0)) * 60)) * 60) + '秒'
-        } else {
-          time = parseInt(time) + '秒'
-        }
-      }
-      return time
     },
     async cityChange (value) {
       const cityLength = value.length
@@ -164,7 +141,8 @@ export default {
     },
     async getLineData () {
       const res = await getNewUsersByLine(this.lineTimeParam)
-      this.lineChartData = this.getViewData('时间', '新增用户', res.data)
+      this.lineRawData = _.get(res, ['data'], [])
+      this.$nextTick(() => { this.renderLineChart() })
     },
     async getMapData () {
       const params = {
@@ -174,17 +152,12 @@ export default {
       }
       let mapData = await getNewUsersByMap(params)
       const list = _.get(mapData, ['data'], [])
-      this.mapChartData = this.getViewData('位置', '人次', list.map((item) => {
-        return {
-          key: item['name'],
-          value: item['value']
-        }
-      }))
+      this.mapRawData = list.map(item => ({ name: item.name, value: item.value }))
       this.tableData = list.sort((item1, item2) => item2.value - item1.value)
+      this.$nextTick(() => { this.renderMapChart() })
     }
   },
   async mounted () {
-    this.resize()
     this.lineTimeParam = {
       filterBy: 'hour',
       st: moment(moment().format('YYYY/MM/DD 00:00:00'), 'YYYY/MM/DD HH:mm:ss').unix() * 1000,
@@ -196,6 +169,11 @@ export default {
     }
     await this.getLineData()
     await this.getMapData()
+  },
+  beforeDestroy () {
+    Object.values(this.chartInstances).forEach(chart => {
+      if (chart) chart.dispose()
+    })
   }
 }
 </script>

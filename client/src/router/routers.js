@@ -12,6 +12,7 @@ import Management from '@/view/management/index.vue'
 import SystemEnv from '@/view/system/system.vue'
 import ErrorPage401 from '@/view/error-page/401.vue'
 import ErrorPage500 from '@/view/error-page/500.vue'
+import UvStatistics from '@/view/uv/index.vue'
 /**
  * iview-admin中meta除了原生参数外可配置的参数:
  * meta: {
@@ -98,6 +99,15 @@ export default [
           title: '新增用户数据',
         },
         component: NewUsers,
+      },
+      {
+        path: 'uv',
+        name: 'uv-statistics',
+        meta: {
+          icon: 'md-eye',
+          title: 'UV统计',
+        },
+        component: UvStatistics,
       },
     ],
   },

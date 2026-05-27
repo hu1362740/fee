@@ -131,18 +131,23 @@ async function getCityDistributeInRange(projectId, startAt, finishAt) {
   let cityDistribute = {}
   // uv记录表按月分表, 因此需要分月计算总uv
   for (let currentAtMoment = startAtMoment; currentAtMoment.isBefore(finishAtMoment); currentAtMoment = currentAtMoment.clone().add(1, 'months')) {
-    let tableName = getTableName(projectId, startAt) // ❌ 始终使用 startAt 的月份，导致跨月查询时表名不正确
+    // let tableName = getTableName(projectId, startAt) // ❌ 始终使用 startAt 的月份，导致跨月查询时表名不正确
     // 正确代码
     // let tableName = getTableName(projectId, currentAtMoment.unix())  // ✅ 使用当前循环的月份
     //     groupBy：将数据切分成不同的地理块。SQL 返回的结果类似于：
     // { country: 'China', province: 'Guangdong', city: 'Shenzhen', uv_count: 50 }
     // { country: 'China', province: 'Beijing', city: 'Beijing', uv_count: 30 }
+    let tableName = getTableName(projectId, currentAtMoment.unix())
+    let startVisitAtHour = startAtMoment.format(VisitAtHourDateFormat)
+    let endVisitAtHour = finishAtMoment.format(VisitAtHourDateFormat)
     let rawRecordList = await Knex
       .countDistinct('uuid as uv_count')
       .select([`country`, `province`, `city`])
       .from(tableName)
-      .where('create_time', '>', startAt)
-      .andWhere('create_time', '<', finishAt)
+      // .where('create_time', '>', startAt)
+      // .andWhere('create_time', '<', finishAt)
+      .where('visit_at_hour', '>=', startVisitAtHour)
+      .andWhere('visit_at_hour', '<=', endVisitAtHour)
       .groupBy([`country`, `province`, `city`])
       .catch(() => { return [] })
 

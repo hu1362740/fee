@@ -191,6 +191,7 @@ class TaskManager extends Base {
       // 汇总命令
       let summaryCommandList = [
         'Summary:UV',
+        'Summary:PV',
         'Summary:NewUser',
         'Summary:Performance',
         'Summary:Error'

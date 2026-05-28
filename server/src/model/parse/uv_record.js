@@ -44,16 +44,13 @@ function getTableName(projectId, createTimeAt) {
  * @param {string} city
  * @return {boolean} 操作是否成功
  */
-async function replaceUvRecord(projectId, uuid, visitAt, country, province, city) {
-  // pv数无意义, 不再计算
-  let pvCount = 0
-
+async function replaceUvRecord(projectId, uuid, visitAt, country, province, city, pvCount = 1) {
   let visitAtHour = moment.unix(visitAt).format(VisitAtHourDateFormat)
   let tableName = getTableName(projectId, visitAt)
   let updateAt = moment().unix()
   // 返回值是一个列表
   let oldRecordList = await Knex
-    .select([`id`])
+    .select([`id`, `pv_count`])
     .from(tableName)
     .where('uuid', '=', uuid)
     .andWhere('visit_at_hour', '=', visitAtHour)
@@ -62,23 +59,30 @@ async function replaceUvRecord(projectId, uuid, visitAt, country, province, city
     })
   // 利用get方法, 不存在直接返回0, 没毛病
   let id = _.get(oldRecordList, [0, 'id'], 0)
-  let data = {
-    uuid,
-    visit_at_hour: visitAtHour,
-    pv_count: pvCount,
-    country,
-    province,
-    city,
-    update_time: updateAt
-  }
+  let existingPvCount = _.get(oldRecordList, [0, 'pv_count'], 0)
   let isSuccess = false
   if (id > 0) {
     let affectRows = await Knex(tableName)
-      .update(data)
+      .update({
+        country,
+        province,
+        city,
+        pv_count: existingPvCount + pvCount,
+        update_time: updateAt
+      })
       .where(`id`, '=', id)
     isSuccess = affectRows > 0
   } else {
-    data['create_time'] = updateAt
+    let data = {
+      uuid,
+      visit_at_hour: visitAtHour,
+      pv_count: pvCount,
+      country,
+      province,
+      city,
+      create_time: updateAt,
+      update_time: updateAt
+    }
     let insertResult = await Knex
       .returning('id')
       .insert(data)
@@ -167,9 +171,37 @@ async function getCityDistributeInRange(projectId, startAt, finishAt) {
   return cityDistribute
 }
 
+/**
+ * 获取一段时间范围内的 PV 总数（累加 pv_count）
+ * @param {*} projectId
+ * @param {*} startAt 开始时间戳
+ * @param {*} finishAt 结束时间戳
+ * @returns {Number} 总 PV 数
+ */
+async function getPvCountInRange (projectId, startAt, finishAt) {
+  let startAtMoment = moment.unix(startAt)
+  let finishAtMoment = moment.unix(finishAt)
+  let totalPv = 0
+  for (let currentAtMoment = startAtMoment.clone(); currentAtMoment.isBefore(finishAtMoment); currentAtMoment = currentAtMoment.clone().add(1, 'months')) {
+    let tableName = getTableName(projectId, currentAtMoment.unix())
+    let startVisitAtHour = startAtMoment.format(VisitAtHourDateFormat)
+    let endVisitAtHour = finishAtMoment.format(VisitAtHourDateFormat)
+    let result = await Knex
+      .sum('pv_count as total_pv')
+      .from(tableName)
+      .where('visit_at_hour', '>=', startVisitAtHour)
+      .andWhere('visit_at_hour', '<=', endVisitAtHour)
+      .catch(() => [])
+    let pv = _.get(result, [0, 'total_pv'], 0)
+    totalPv += (pv || 0)
+  }
+  return totalPv
+}
+
 export default {
   replaceUvRecord,
   getExistUuidSetInHour,
   getCityDistributeInRange,
+  getPvCountInRange,
   getTableName
 }

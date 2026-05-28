@@ -13,6 +13,7 @@ import SystemEnv from '@/view/system/system.vue'
 import ErrorPage401 from '@/view/error-page/401.vue'
 import ErrorPage500 from '@/view/error-page/500.vue'
 import UvStatistics from '@/view/uv/index.vue'
+import PvStatistics from '@/view/pv/index.vue'
 /**
  * iview-admin中meta除了原生参数外可配置的参数:
  * meta: {
@@ -108,6 +109,15 @@ export default [
           title: 'UV统计',
         },
         component: UvStatistics,
+      },
+      {
+        path: 'pv',
+        name: 'pv-statistics',
+        meta: {
+          icon: 'md-browsers',
+          title: 'PV统计',
+        },
+        component: PvStatistics,
       },
     ],
   },

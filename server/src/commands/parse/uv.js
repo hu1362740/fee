@@ -147,7 +147,7 @@ class ParseUV extends ParseBase {
           // 核心去重逻辑：只有当数据库中不存在该 uuid 时才执行插入操作
           if (existUuidSet.has(uuid) === false) {
             // 调用模型方法替换或插入 UV 记录
-            isSuccess = await MUvRecord.replaceUvRecord(projectId, uuid, visitAt, country, province, city)
+            isSuccess = await MUvRecord.replaceUvRecord(projectId, uuid, visitAt, country, province, city, pvCount)
             // 插入成功后，将 uuid 加入本地 existUuidSet，防止同一批次内重复处理（虽然逻辑上 uuid 在 map 中是唯一的，但增强稳定性）
             existUuidSet.add(uuid)
           }

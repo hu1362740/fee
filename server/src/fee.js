@@ -27,6 +27,7 @@ const registedCommandList = [
   './commands/save_log/parseNginxLog', // 将ngnix日志落在文件中
   // 从数据库中, 按时间段统计
   './commands/summary/uv', //  统计uv数据
+  './commands/summary/pv', //  统计pv数据
   './commands/summary/time_on_site', //  统计用户停留时长
   './commands/summary/system_os.js', // 按月统计系统分布, 每天跑
   './commands/summary/system_browser.js', // 按月统计浏览器分布, 每天跑

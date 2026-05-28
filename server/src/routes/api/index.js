@@ -10,6 +10,7 @@ import User from '~/src/routes/api/user'
 import Login from '~/src/routes/api/login'
 import Project from '~/src/routes/api/project'
 import UV from '~/src/routes/api/uv'
+import PV from '~/src/routes/api/pv'
 // Performance 本身是内置对象名
 import RPerformance from '~/src/routes/api/performance'
 
@@ -26,5 +27,6 @@ export default {
   ...Login,
   ...Project,
   ...RPerformance,
-  ...UV
+  ...UV,
+  ...PV
 }

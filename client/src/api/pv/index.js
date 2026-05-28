@@ -1,17 +1,22 @@
 import axios from '@/libs/api.request'
+import { getProjectId } from '@/libs/util'
 
 export const getPVCount = (params) => {
   return axios.request({
-    url: '/api/pv/count',
+    url: `project/${getProjectId()}/api/pv/count`,
     method: 'get',
-    params
+    params: {
+      ...params
+    }
   })
 }
 
 export const getPVTrend = (params) => {
   return axios.request({
-    url: '/api/pv/trend',
+    url: `project/${getProjectId()}/api/pv/trend`,
     method: 'get',
-    params
+    params: {
+      ...params
+    }
   })
 }

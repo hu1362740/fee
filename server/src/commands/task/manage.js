@@ -338,18 +338,19 @@ class TaskManager extends Base {
 
   async execCommand (commandName, args = []) {
     let argvString = args.map((arg) => { return `'${arg}'` }).join('   ')
-    let command = `NODE_ENV=${env} node ${projectBaseUri}/dist/fee.js ${commandName}  ${argvString}`
-    this.log(`待执行命令=> ${command}`)
+    let command = `node ${projectBaseUri}/dist/fee.js ${commandName}  ${argvString}`
+    this.log(`待执行命令=> NODE_ENV=${env} ${command}`)
     let commandStartAtFormated = moment().format(DATE_FORMAT.DISPLAY_BY_MILLSECOND)
     let commandStartAtms = moment().valueOf()
     shell.exec(command, {
       async: true,
-      silent: true
+      silent: true,
+      env: Object.assign({}, process.env, { NODE_ENV: env })
     }, () => {
       let commandFinishAtFormated = moment().format(DATE_FORMAT.DISPLAY_BY_MILLSECOND)
       let commandFinishAtms = moment().valueOf()
       let during = (commandFinishAtms - commandStartAtms) / 1000
-      this.log(`${command}命令执行完毕, 共用时${during}秒, 开始执行时间=> ${commandStartAtFormated}, 执行完毕时间=> ${commandFinishAtFormated}`)
+      this.log(`NODE_ENV=${env} ${command}命令执行完毕, 共用时${during}秒, 开始执行时间=> ${commandStartAtFormated}, 执行完毕时间=> ${commandFinishAtFormated}`)
     })
   }
 }

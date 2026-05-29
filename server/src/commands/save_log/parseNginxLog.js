@@ -103,6 +103,7 @@ class NginxParseLog extends SaveLogBase {
       let logCreateAt = this.parseLogCreateAt(content)
       if (_.isFinite(logCreateAt) === false || logCreateAt <= 0) {
         this.log('日志时间不合法，自动跳过')
+        next()
         return
       }
       
@@ -112,6 +113,7 @@ class NginxParseLog extends SaveLogBase {
         let writeLogClient = this.getWriteStreamClientByType(logCreateAt, LKafka.LOG_TYPE_TEST)
         writeLogClient.write(content)
         this.log('测试日志写入完毕')
+        next()
         return
       }
       
@@ -120,6 +122,7 @@ class NginxParseLog extends SaveLogBase {
       let parseResult = await that.parseLog(content, projectMap)
       if (_.isEmpty(parseResult)) {
         that.log('日志格式不规范，自动跳过，原日志内容为 =>', content)
+        next()
         return
       }
 
@@ -131,6 +134,7 @@ class NginxParseLog extends SaveLogBase {
       if (skipIt) {
         // 根据项目抽样比率，过滤打点数据，如果没有命中，直接返回
         this.log(` projectName => ${projectName}, logCounter => ${logCounter}, checkFlag => ${checkFlag}, projectRate => ${projectRate}, 未命中抽样比，自动跳过`)
+        next()
         return
       }
       legalLogCounter = legalLogCounter + 1

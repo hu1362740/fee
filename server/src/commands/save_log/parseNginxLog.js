@@ -52,14 +52,30 @@ class NginxParseLog extends SaveLogBase {
     // 【修改点】智能检测多种日志文件模式，以兼容不同操作系统和部署方式
     let logAbsolutePath = null
 
-    // 模式 1: fee-access.log (Windows 开发环境常见)
-    const feeAccessLogFile = path.join(nginxLogFilePath, 'fee-access.log')
-    if (fs.existsSync(feeAccessLogFile)) {
-      logAbsolutePath = feeAccessLogFile
-      that.log(`[兼容模式] 检测到 fee-access.log，使用 Windows 单文件模式`)
+    // 模式 1: Windows 按分钟分割 (通过 PowerShell 脚本分割，路径包含 fee-access/YYYY/MM/DD/HH/mm/log)
+    const windowsSplitLogDir = path.join(nginxLogFilePath, 'fee-access')
+    if (!logAbsolutePath) {
+      let timeAt = moment().unix() - 60 // 获取一分钟前的时间戳，因为当前分钟的日志可能尚未完全写入
+      let timeMoment = moment.unix(timeAt)
+      let formatStr = timeMoment.format('YYYY/MM/DD/HH/mm')
+      let windowsSplitLogFile = path.join(windowsSplitLogDir, formatStr, 'log')
+
+      if (fs.existsSync(windowsSplitLogFile)) {
+        logAbsolutePath = windowsSplitLogFile
+        that.log(`[兼容模式] 检测到 Windows 分割日志，使用 fee-access/YYYY/MM/DD/HH/mm/log 模式`)
+      }
     }
 
-    // 模式 2: access.log (标准 Nginx 默认日志文件名)
+    // 模式 2: fee-access.log (Windows 开发环境常见的单文件模式)
+    if (!logAbsolutePath) {
+      const feeAccessLogFile = path.join(nginxLogFilePath, 'fee-access.log')
+      if (fs.existsSync(feeAccessLogFile)) {
+        logAbsolutePath = feeAccessLogFile
+        that.log(`[兼容模式] 检测到 fee-access.log，使用 Windows 单文件模式`)
+      }
+    }
+
+    // 模式 3: access.log (标准 Nginx 默认日志文件名)
     if (!logAbsolutePath) {
       const standardAccessLogFile = path.join(nginxLogFilePath, 'access.log')
       if (fs.existsSync(standardAccessLogFile)) {
@@ -68,7 +84,7 @@ class NginxParseLog extends SaveLogBase {
       }
     }
 
-    // 模式 3: Linux 按分钟分割 (生产环境常见，路径包含 /YYYY/MM/DD/HH/mm.log)
+    // 模式 4: Linux 按分钟分割 (生产环境常见，路径包含 /YYYY/MM/DD/HH/mm.log)
     if (!logAbsolutePath) {
       let timeAt = moment().unix() - 60 // 获取一分钟前的时间戳，因为当前分钟的日志可能尚未完全写入或轮转
       let timeMoment = moment.unix(timeAt)

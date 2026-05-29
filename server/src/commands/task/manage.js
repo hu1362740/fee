@@ -135,6 +135,8 @@ class TaskManager extends Base {
       } else {
         that.execCommand('SaveLog:Nginx', [])
       }
+      that.log(`[按分钟] Windows 系统下分割 Nginx 日志文件`)
+      that.execCommand('Utils:SplitLog', [])
       that.log(`[按分钟] 每分钟启动一次WatchDog:Alarm, 监控平台运行情况 `)
       that.execCommand('WatchDog:Alarm', [])
 

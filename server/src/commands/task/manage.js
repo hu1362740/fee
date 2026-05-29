@@ -337,7 +337,7 @@ class TaskManager extends Base {
   }
 
   async execCommand (commandName, args = []) {
-    let argvString = args.map((arg) => { return `'${arg}'` }).join('   ')
+    let argvString = args.map((arg) => { return `"${arg}"` }).join('   ')
     let command = `node ${projectBaseUri}/dist/fee.js ${commandName}  ${argvString}`
     this.log(`待执行命令=> NODE_ENV=${env} ${command}`)
     let commandStartAtFormated = moment().format(DATE_FORMAT.DISPLAY_BY_MILLSECOND)

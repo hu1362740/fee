@@ -472,7 +472,7 @@
         this.status.loading.geographyChart = true
         let response = await ErrorApi.fetchGeographyDistribution(this.startAt, this.endAt, this.status.selectedErrorNameList, this.status.selectedUrl)
         this.status.loading.geographyChart = false
-        this.database.provinceDistributionList = response.data
+        this.database.provinceDistributionList = _.get(response, ['data'], [])
       },
       async fetchErrorLog () {
         let currentPage = _.get(this.database, ['errorLog', 'pager', 'currentPage'], 1)
@@ -576,7 +576,8 @@
       // 该值可由省份分布直接推算出来, 所以不需要在data中单起变量了
       geographyChartDistributionRecord () {
         let recordList = []
-        for (let provinceDistribution of this.database.provinceDistributionList) {
+        let provinceDistributionList = _.get(this.database, ['provinceDistributionList'], [])
+        for (let provinceDistribution of provinceDistributionList) {
           let place = _.get(provinceDistribution, ['name'], '')
           let timeCount = _.get(provinceDistribution, ['value'], 0)
           let record = {
@@ -590,6 +591,7 @@
           columns: ['位置', '次数'],
           rows: recordList
         }
+        console.log('finialRecordConfig',finialRecordConfig)
         return finialRecordConfig
       }
     }

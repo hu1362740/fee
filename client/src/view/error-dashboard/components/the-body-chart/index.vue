@@ -37,8 +37,8 @@
       <Col span="16">
         <Card shadow>
           <Loading :isSpinShow="isSpinShowMap"></Loading>
-          <ve-map :data="geographyChartDistributionRecord"
-                  :height="400+'px'"/>
+          <!-- <ve-map :data="geographyChartDistributionRecord"
+                  :height="400+'px'"/> -->
         </Card>
       </Col>
       <Col span="8">

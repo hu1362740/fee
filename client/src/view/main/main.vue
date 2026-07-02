@@ -140,10 +140,14 @@
           window.open(name.split('_')[1])
           return
         }
+        const projectId = getProjectId()
+        if (this.$route.name === name && String(this.$route.params.id) === String(projectId)) {
+          return
+        }
         this.$router.push({
           name: name,
           params: {
-            id: getProjectId()
+            id: projectId
           }
         })
       },

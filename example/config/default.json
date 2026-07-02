@@ -2,7 +2,7 @@
   "port": 8090,
   "host": "127.0.0.1",
   "projectId": 1,
-  "projectPid": "template",
+  "projectPid": "test_1",
   "projectName": "Fee SDK 示例业务方",
   "collectorPath": "/dig",
   "writeServerKafkaLog": true,

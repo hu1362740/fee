@@ -65,7 +65,6 @@
     }
 
     // 初始化 SDK 公共字段。pid 必须与 server 数据库 t_o_project.project_name 对应。
-    alert(config.projectPid)
     window.dt.set({
       pid: config.projectPid,
       uuid: state.uuid,
@@ -443,18 +442,54 @@
    * example 页面启动入口。
    *
    * 执行顺序：
-   * 1. 请求 /api/config，读取 example 配置。
-   * 2. 初始化 SDK。
-   * 3. 绑定页面按钮/表单事件。
-   * 4. 安装资源性能和交互性能观察器。
-   * 5. 自动发送一次页面浏览行为打点。
+   * 1. 先同步设置基础配置，确保 SDK 的 window.onload 事件触发时 pid 已有值。
+   * 2. 请求 /api/config，读取完整 example 配置。
+   * 3. 用完整配置更新 SDK。
+   * 4. 绑定页面按钮/表单事件。
+   * 5. 安装资源性能和交互性能观察器。
+   * 6. 自动发送一次页面浏览行为打点。
    */
   function boot () {
+    // 先同步设置基础配置，避免 SDK 的 window.onload 触发时 pid 为空导致报错
+    if (window.dt) {
+      window.dt.set({
+        pid: 'test_1',
+        uuid: state.uuid,
+        ucid: state.ucid,
+        is_test: false,
+        version: 'example-business-1.0.0',
+        record: {
+          time_on_page: true,
+          performance: true,
+          js_error: true,
+          js_error_report_config: {
+            ERROR_RUNTIME: true,
+            ERROR_SCRIPT: true,
+            ERROR_STYLE: true,
+            ERROR_IMAGE: true,
+            ERROR_AUDIO: true,
+            ERROR_VIDEO: true,
+            ERROR_CONSOLE: true,
+            ERROR_TRY_CATCH: true,
+            checkErrrorNeedReport: function () {
+              return true
+            }
+          }
+        },
+        getPageType: function (location) {
+          return 'example:' + location.pathname
+        }
+      })
+      console.log('SDK 基础配置已设置，pid=test_1')
+    }
+
+    // 再异步获取完整配置并更新
     window.fetch('/api/config')
       .then(function (res) { return res.json() })
       .then(function (config) {
-        console.log('config',config)
+        console.log('config', config)
         state.config = config
+        // 用服务端配置更新 SDK（会合并覆盖基础配置）
         initSdk(config)
         bindEvents()
         installPerformanceObservers()

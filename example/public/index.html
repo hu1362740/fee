@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fee SDK Example 业务方演示</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Fee SDK Example</p>
+      <h1>模拟业务方数据打点演示</h1>
+      <p class="subtitle">这个独立子项目加载主项目 SDK，模拟真实业务页面产生错误、性能和用户行为数据。</p>
+    </div>
+    <div class="status-card">
+      <span class="status-dot"></span>
+      <span id="runtimeStatus">等待 SDK 初始化</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel">
+      <div class="panel-title">
+        <h2>业务操作台</h2>
+        <p>点击下方控件会调用 SDK 的不同打点接口。</p>
+      </div>
+
+      <div class="toolbar">
+        <button id="btnPageView" type="button">页面浏览打点</button>
+        <button id="btnPrimaryAction" type="button">按钮点击打点</button>
+        <button id="btnNotifyError" type="button">主动错误上报</button>
+        <button id="btnPassiveError" type="button">触发 JS 运行时错误</button>
+        <button id="btnResourceError" type="button">触发资源加载错误</button>
+        <button id="btnInfoMetric" type="button">自定义信息指标</button>
+      </div>
+
+      <form id="checkoutForm" class="checkout-form">
+        <label>
+          订单号
+          <input name="orderNo" value="ORDER-20260702-001">
+        </label>
+        <label>
+          金额
+          <input name="amount" value="268.00">
+        </label>
+        <button type="submit">提交订单表单</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <h2>本地采集记录</h2>
+        <p>这里读取 example 收集器最近收到的记录，用于快速确认 SDK 是否已经发出数据。</p>
+      </div>
+      <div class="summary-grid">
+        <div>
+          <span class="summary-label">总数</span>
+          <strong id="totalCount">0</strong>
+        </div>
+        <div>
+          <span class="summary-label">error</span>
+          <strong id="errorCount">0</strong>
+        </div>
+        <div>
+          <span class="summary-label">product</span>
+          <strong id="productCount">0</strong>
+        </div>
+        <div>
+          <span class="summary-label">perf</span>
+          <strong id="perfCount">0</strong>
+        </div>
+        <div>
+          <span class="summary-label">info</span>
+          <strong id="infoCount">0</strong>
+        </div>
+      </div>
+      <pre id="recordPreview" class="record-preview">[]</pre>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-title">
+        <h2>闭环说明</h2>
+        <p>页面端 SDK 发出的 Image 请求会被桥接到 example 收集器，收集器写入 Nginx-like 日志和 server 可消费的 Kafka JSON 日志。</p>
+      </div>
+      <ol class="flow-list">
+        <li>业务页面调用 `window.dt` 的错误、性能、行为、信息接口。</li>
+        <li>`sdk-bridge.js` 将 SDK 默认打点地址重定向到本地 `/dig`。</li>
+        <li>`scripts/server.js` 记录 `example/logs/nginx/fee-access.log`，并写入 `server/log/kafka/json`。</li>
+        <li>运行 `server` 的 `Parse:*` / `Summary:*` 命令后，client 管理后台即可查看对应图表。</li>
+      </ol>
+    </section>
+  </main>
+
+  <!-- 必须先加载桥接脚本，再加载主项目 SDK。桥接脚本不会修改 SDK 源码，只改写 SDK Image 请求的目标地址。 -->
+  <script src="/sdk-bridge.js"></script>
+  <script src="/sdk/index.js"></script>
+  <script src="/src/main.js"></script>
+</body>
+</html>

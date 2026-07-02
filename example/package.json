@@ -1,0 +1,21 @@
+{
+  "name": "fee-sdk-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "模拟业务方项目，用于演示 fee SDK 打点、采集、传输与服务端解析闭环。",
+  "main": "scripts/server.js",
+  "scripts": {
+    "start": "node scripts/server.js",
+    "dev": "node scripts/server.js",
+    "build": "node scripts/build.js",
+    "test": "node scripts/smoke-test.js",
+    "flow:commands": "node scripts/print-flow-commands.js"
+  },
+  "keywords": [
+    "fee",
+    "sdk",
+    "monitor",
+    "example"
+  ],
+  "license": "MIT"
+}

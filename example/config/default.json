@@ -1,0 +1,20 @@
+{
+  "port": 8090,
+  "host": "127.0.0.1",
+  "projectId": 1,
+  "projectPid": "template",
+  "projectName": "Fee SDK 示例业务方",
+  "sdkTarget": "http://test.com/dig",
+  "collectorPath": "/dig",
+  "writeServerKafkaLog": true,
+  "serverKafkaLogRoot": "../server/log/kafka",
+  "defaultUser": {
+    "ucid": "example-user-10001",
+    "nickname": "示例用户"
+  },
+  "defaultLocation": {
+    "country": "中国",
+    "province": "上海",
+    "city": "上海"
+  }
+}

@@ -309,7 +309,6 @@ function createExampleServer (config = loadConfig()) {
         projectPid: config.projectPid,
         projectName: config.projectName,
         collectorPath: config.collectorPath,
-        sdkTarget: config.sdkTarget,
         writeServerKafkaLog: config.writeServerKafkaLog,
         defaultUser: config.defaultUser,
         sdkBundle: sdkBundle ? path.relative(repoRoot, sdkBundle) : ''

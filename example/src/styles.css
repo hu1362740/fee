@@ -145,6 +145,10 @@ input {
   margin-bottom: 14px;
 }
 
+.summary-grid.flow-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .summary-grid div {
   padding: 10px;
   border-radius: 6px;
@@ -176,6 +180,11 @@ input {
 .flow-list {
   margin-bottom: 0;
   line-height: 1.8;
+}
+
+.flow-list.compact {
+  padding-left: 20px;
+  color: #475467;
 }
 
 @media (max-width: 900px) {

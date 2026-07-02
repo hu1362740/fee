@@ -50,50 +50,47 @@
 
     <section class="panel">
       <div class="panel-title">
-        <h2>本地采集记录</h2>
-        <p>这里读取 example 收集器最近收到的记录，用于快速确认 SDK 是否已经发出数据。</p>
+        <h2>真实链路检查</h2>
+        <p>example 页面不会改写 SDK 目标地址，打点请求会直接发送到 SDK 内置的 `http://test.com/dig`。</p>
       </div>
-      <div class="summary-grid">
+      <div class="summary-grid flow-grid">
         <div>
-          <span class="summary-label">总数</span>
-          <strong id="totalCount">0</strong>
+          <span class="summary-label">SDK 状态</span>
+          <strong id="sdkState">等待</strong>
         </div>
         <div>
-          <span class="summary-label">error</span>
-          <strong id="errorCount">0</strong>
+          <span class="summary-label">项目 pid</span>
+          <strong id="projectPid">-</strong>
         </div>
         <div>
-          <span class="summary-label">product</span>
-          <strong id="productCount">0</strong>
-        </div>
-        <div>
-          <span class="summary-label">perf</span>
-          <strong id="perfCount">0</strong>
-        </div>
-        <div>
-          <span class="summary-label">info</span>
-          <strong id="infoCount">0</strong>
+          <span class="summary-label">打点目标</span>
+          <strong>test.com</strong>
         </div>
       </div>
-      <pre id="recordPreview" class="record-preview">[]</pre>
+      <ol class="flow-list compact">
+        <li>打开浏览器 Network，过滤 `dig`，能看到 SDK 发出的 Image 请求。</li>
+        <li>确认本机 Nginx 的 `fee-access.log` 或 `access.log` 中出现 `/dig?d=...`。</li>
+        <li>运行 `server` 的 `SaveLog:Nginx`、`Parse:*`、`Summary:*` 命令。</li>
+        <li>登录 `client`，在模板项目中查看错误、性能、UV/PV、行为等数据。</li>
+      </ol>
     </section>
 
     <section class="panel wide">
       <div class="panel-title">
         <h2>闭环说明</h2>
-        <p>页面端 SDK 发出的 Image 请求会被桥接到 example 收集器，收集器写入 Nginx-like 日志和 server 可消费的 Kafka JSON 日志。</p>
+        <p>页面端 SDK 发出的 Image 请求直接进入本机 Nginx，再由 server 侧命令完成日志落地、解析、汇总和 client 展示。</p>
       </div>
       <ol class="flow-list">
         <li>业务页面调用 `window.dt` 的错误、性能、行为、信息接口。</li>
-        <li>`sdk-bridge.js` 将 SDK 默认打点地址重定向到本地 `/dig`。</li>
-        <li>`scripts/server.js` 记录 `example/logs/nginx/fee-access.log`，并写入 `server/log/kafka/json`。</li>
+        <li>SDK 使用内置目标地址 `http://test.com/dig` 发送 1px Image 请求。</li>
+        <li>本机 Nginx 接收 `/dig?d=...` 并写入 access log。</li>
+        <li>`server` 通过 `SaveLog:Nginx` 将 access log 转为 `server/log/kafka/json`。</li>
         <li>运行 `server` 的 `Parse:*` / `Summary:*` 命令后，client 管理后台即可查看对应图表。</li>
       </ol>
     </section>
   </main>
 
-  <!-- 必须先加载桥接脚本，再加载主项目 SDK。桥接脚本不会修改 SDK 源码，只改写 SDK Image 请求的目标地址。 -->
-  <script src="/sdk-bridge.js"></script>
+  <!-- 直接加载主项目 SDK，不改写 SDK 内置的 http://test.com/dig 打点目标。 -->
   <script src="/sdk/index.js"></script>
   <script src="/src/main.js"></script>
 </body>

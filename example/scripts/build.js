@@ -9,7 +9,6 @@ const requiredFiles = [
   'package.json',
   'config/default.json',
   'public/index.html',
-  'public/sdk-bridge.js',
   'src/main.js',
   'src/styles.css',
   'scripts/server.js',

@@ -64,6 +64,8 @@
     })
 
     setStatus('SDK 已初始化，pid=' + config.projectPid)
+    qs('#sdkState').textContent = '已初始化'
+    qs('#projectPid').textContent = config.projectPid
   }
 
   function reportPageView () {
@@ -98,7 +100,7 @@
       note: '表单提交附加信息'
     })
 
-    refreshRecords()
+    console.info('Example 表单提交打点已触发', { orderNo: orderNo, amount: amount })
   }
 
   function reportNotifyError () {
@@ -198,48 +200,28 @@
     qs('#btnPageView').addEventListener('click', function () {
       markInteraction('click-page-view')
       reportPageView()
-      refreshRecords()
     })
     qs('#btnPrimaryAction').addEventListener('click', function () {
       markInteraction('click-primary-action')
       reportButtonClick()
-      refreshRecords()
     })
     qs('#btnNotifyError').addEventListener('click', function () {
       markInteraction('click-notify-error')
       reportNotifyError()
-      refreshRecords()
     })
     qs('#btnPassiveError').addEventListener('click', function () {
       markInteraction('click-passive-error')
       triggerPassiveError()
-      setTimeout(refreshRecords, 300)
     })
     qs('#btnResourceError').addEventListener('click', function () {
       markInteraction('click-resource-error')
       triggerResourceError()
-      setTimeout(refreshRecords, 300)
     })
     qs('#btnInfoMetric').addEventListener('click', function () {
       markInteraction('click-info-metric')
       reportInfoMetric()
-      refreshRecords()
     })
     qs('#checkoutForm').addEventListener('submit', reportFormSubmit)
-  }
-
-  function refreshRecords () {
-    window.fetch('/api/records?limit=20')
-      .then(function (res) { return res.json() })
-      .then(function (payload) {
-        var summary = payload.summary || { total: 0, byType: {} }
-        qs('#totalCount').textContent = summary.total || 0
-        qs('#errorCount').textContent = summary.byType.error || 0
-        qs('#productCount').textContent = summary.byType.product || 0
-        qs('#perfCount').textContent = summary.byType.perf || 0
-        qs('#infoCount').textContent = summary.byType.info || 0
-        qs('#recordPreview').textContent = JSON.stringify(payload.records || [], null, 2)
-      })
   }
 
   function boot () {
@@ -251,8 +233,6 @@
         bindEvents()
         installPerformanceObservers()
         reportPageView()
-        refreshRecords()
-        window.setInterval(refreshRecords, 3000)
       })
       .catch(function (err) {
         setStatus('启动失败：' + err.message)

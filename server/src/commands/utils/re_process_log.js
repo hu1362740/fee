@@ -130,6 +130,15 @@ class CommandReProcessLog extends Base {
           DATE_FORMAT.UNIT.DAY // countType:
         ]
       )
+
+      // [按天/按月] 根据历史数据, 汇总分析用户菜单点击量
+      this.log(`[按天] Summary:MenuClick任务开始, 处理时间 => ${formatDay}`)
+      await this.execCommand('Summary:MenuClick',
+        [
+          formatDay, // countAtTime:
+          DATE_FORMAT.UNIT.DAY // countType:
+        ]
+      )
     }
   }
 
@@ -198,6 +207,15 @@ class CommandReProcessLog extends Base {
       // [按月] 根据历史数据, 汇总分析记录指定时间范围内用户停留时长
       this.log(`[按月] Summary:TimeOnSite任务开始, 处理时间 => ${formatMonth}`)
       await this.execCommand('Summary:TimeOnSite',
+        [
+          formatMonth, // countAtTime
+          DATE_FORMAT.UNIT.MONTH // countType
+        ]
+      )
+
+      // [按月] 根据历史数据, 汇总分析用户菜单点击量
+      this.log(`[按月] Summary:MenuClick任务开始, 处理时间 => ${formatMonth}`)
+      await this.execCommand('Summary:MenuClick',
         [
           formatMonth, // countAtTime
           DATE_FORMAT.UNIT.MONTH // countType

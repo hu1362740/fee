@@ -37,6 +37,7 @@ const registedCommandList = [
   './commands/summary/performance', //  按小时/天/月统计性能指标
   './commands/summary/new_user_summary', //  统计新增用户数
   './commands/summary/error_summary', // 统计某一错误的数量
+  './commands/summary/menu_click', // 统计菜单点击量
   // 监控
   './commands/watch_dog/saas', //  saas监控
   './commands/watch_dog/alarm',

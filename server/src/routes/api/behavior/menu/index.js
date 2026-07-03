@@ -17,9 +17,9 @@ let clickSummaryConfig = RouterConfigBuilder.routerConfigBuilder('/api/behavior/
   // 获取当前项目ID
   let projectId = _.get(req, ['fee', 'project', 'projectId'], 0)
   
-  // 计算时间范围：从7天前到当天（共7天数据）
-  let startAtMoment = moment(moment().format(REQUEST_DATE_TYPE), REQUEST_DATE_TYPE).subtract(7, 'days')
-  let endAtMoment = startAtMoment.clone().add(7, 'days') // 取最近七天的数据
+  // 计算时间范围：包含今天在内的最近7天数据
+  let startAtMoment = moment(moment().format(REQUEST_DATE_TYPE), REQUEST_DATE_TYPE).subtract(6, 'days')
+  let endAtMoment = startAtMoment.clone().add(7, 'days')
 
   // 从数据库获取行为分布原始记录列表
   let rawRecordList = await MBehaviorDistribution.getRecordList(projectId, startAtMoment.unix(), endAtMoment.unix(), DATE_FORMAT.UNIT.DAY)

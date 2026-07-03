@@ -240,7 +240,8 @@ class TaskManager extends Base {
         'Summary:NewUser',
         'Summary:Performance',
         'Summary:Error',
-        'Summary:TimeOnSite'
+        'Summary:TimeOnSite',
+        'Summary:MenuClick'
       ]
       for (let summaryCommand of summaryCommandList) {
         // 当日数据
@@ -273,7 +274,8 @@ class TaskManager extends Base {
         'Summary:NewUser',
         'Summary:Performance',
         'Summary:Error',
-        'Summary:TimeOnSite'
+        'Summary:TimeOnSite',
+        'Summary:MenuClick'
       ]
       for (let summaryCommand of summaryCommandList) {
         // 当日数据
@@ -286,6 +288,7 @@ class TaskManager extends Base {
         'Summary:NewUser',
         'Summary:Performance',
         'Summary:TimeOnSite',
+        'Summary:MenuClick',
 
         'Summary:SystemBrowser',
         'Summary:SystemDevice',

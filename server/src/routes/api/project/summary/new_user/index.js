@@ -44,7 +44,13 @@ let distributionByLine = RouterConfigBuilder.routerConfigBuilder('/api/project/s
   }
 
   let rawRecordList = await MNewUserSummary.getNewUserDistribution(projectId, filterBy, timeList)
-  let result = []
+  let resultMap = new Map()
+  for (let time of timeList) {
+    resultMap.set(time, {
+      key: getKey(filterBy, time),
+      value: 0
+    })
+  }
   switch (type) {
     case 'country':
       for (let rawRecord of rawRecordList) {
@@ -54,7 +60,7 @@ let distributionByLine = RouterConfigBuilder.routerConfigBuilder('/api/project/s
           key,
           value: totalCount
         }
-        result.push(resultItem)
+        resultMap.set(countAtTime, resultItem)
       }
       break
     case 'province':
@@ -65,7 +71,7 @@ let distributionByLine = RouterConfigBuilder.routerConfigBuilder('/api/project/s
           city_distribute_id: cityDistributeId
         } = rawRecord
         let key = getKey(countType, countAtTime)
-        let cityDistributionJson = await MCityDistribution.getCityDistributionRecord(cityDistributeId, projectId, moment(countAtTime, 'YYYY-MM-DD_HH').unix())
+        let cityDistributionJson = await MCityDistribution.getCityDistributionRecord(cityDistributeId, projectId, getCountAtUnix(countType, countAtTime))
         let provinceJson = _.get(cityDistributionJson, [country, province], {})
         let sum = getCountUnderProvince(provinceJson)
         let resultItem
@@ -73,28 +79,32 @@ let distributionByLine = RouterConfigBuilder.routerConfigBuilder('/api/project/s
           key,
           value: sum
         }
-        result.push(resultItem)
+        resultMap.set(countAtTime, resultItem)
       }
       break
     case 'city':
+      for (let rawRecord of rawRecordList) {
+        const {
+          count_at_time: countAtTime,
+          count_type: countType,
+          city_distribute_id: cityDistributeId
+        } = rawRecord
+        let key = getKey(countType, countAtTime)
+        let cityDistributionJson = await MCityDistribution.getCityDistributionRecord(cityDistributeId, projectId, getCountAtUnix(countType, countAtTime))
+        let sum = _.get(cityDistributionJson, [country, province, city], 0)
+        let resultItem = {
+          key,
+          value: sum
+        }
+        resultMap.set(countAtTime, resultItem)
+      }
       break
     default:
       res.send(API_RES.showError('type不合法'))
       return
   }
 
-  // 如果结果是空，则返回value是0的数据
-  if (_.isEmpty(result)) {
-    for (let time of timeList) {
-      let key = getKey(filterBy, time)
-      let resultItem = {
-        key,
-        value: 0
-      }
-      result.push(resultItem)
-    }
-  }
-  res.send(API_RES.showResult(result))
+  res.send(API_RES.showResult(Array.from(resultMap.values())))
 })
 
 let distributionByMap = RouterConfigBuilder.routerConfigBuilder('/api/project/summary/new_user/distribution_map', RouterConfigBuilder.METHOD_TYPE_GET, async (req, res) => {
@@ -177,6 +187,10 @@ function getKey (type, time) {
     key += time + ' 00:00~23:59'
   }
   return key
+}
+
+function getCountAtUnix (type, time) {
+  return moment(time, DATE_FORMAT.DATABASE_BY_UNIT[type]).unix()
 }
 
 /**

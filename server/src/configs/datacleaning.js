@@ -10,7 +10,8 @@ const config = {
     os: /^[A-Za-z]+$/,
     country: /[\u4e00-\u9fa5]/,
     province: /[\u4e00-\u9fa5]/,
-    city: /[\u4e00-\u9fa5]/
+    city: /^[\u4e00-\u9fa5a-zA-Z]*$/ 
+    // city: /[\u4e00-\u9fa5]/
   }
 }
 

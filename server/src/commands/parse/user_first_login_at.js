@@ -34,7 +34,7 @@ class UserFirstLoginAt extends ParseBase {
   isLegalRecord (record) {
     let ucid = _.get(record, ['common', 'ucid'], '')
     ucid = `${ucid}`
-    let isLegal = ucid.length > 0 && ucid.length <= 20
+    let isLegal = ucid.length > 0 && ucid.length <= 64
     return isLegal
   }
 

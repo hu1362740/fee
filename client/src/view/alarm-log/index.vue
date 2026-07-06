@@ -1,91 +1,125 @@
 <template>
-  <Card shadow>
-    <!-- <quick-timebar slot="extra"
-                   @dateChange="handleQuickDateChange"
-                   :isDateDisabled="isDateDisabled" /> -->
-    <time-bar @change="handleQuickDateChange" :disabledThirty="true"></time-bar>
-    <Tabs value="line">
-      <TabPane label="报警历史视图"
-               name="line">
+  <div class="alarm-log-page">
+    <Card shadow>
+      <time-bar
+        @change="handleQuickDateChange"
+        :disabledThirty="true"
+      />
+    </Card>
+
+    <Row
+      :gutter="16"
+      class="summary-row"
+    >
+      <Col span="8">
         <Card shadow>
-          <StackArea :height="500"
-                     :data="lineData.dataList"
-                     :scale="lineData.scale"
-                     :isSpinShow="isLoading.stackArea"></StackArea>
+          <div class="summary-item">
+            <span class="summary-label">报警总数</span>
+            <span class="summary-value">{{ filteredAlarmLogList.length }}</span>
+          </div>
         </Card>
-      </TabPane>
-      <!-- <TabPane label="报警时间轴" name="timeline">
-            <Card>
-                <p slot="title">报警时间轴</p>
-                <Card>
-                  选择日期:
-                  <DatePicker
-                    v-model="nowDate"
-                    type="date"
-                    placeholder="Select date"
-                    style="width: 200px"
-                    @on-change="handleDateChange"
-                  ></DatePicker>&nbsp;&nbsp;
-                  选择时间:
-                  <TimePicker
-                    format="HH:mm"
-                    placeholder="Select time"
-                    style="width: 112px"
-                    @on-change="handleTimeChange"
-                    type="timerange"
-                    v-model="initTimeRange"
-                  ></TimePicker>&nbsp;&nbsp;
-                  打开详细信息:
-                  <i-Switch @on-change="handelToggle"/>&nbsp;&nbsp;&nbsp;&nbsp;
-                  <span>报警总数:&nbsp;<span style="color:red">{{totalLogCount}}</span></span>
-                </Card>
-            </Card>
-            <Card>
-                <p style="width:100%;text-align:center" v-if="isShow.timeLineNoData">暂无数据</p>
-                <Timeline>
-                    <TimelineItem v-for="(alarmLog, index) in alarmLogList" :key="alarmLog.id">
-                        <p class="time">{{alarmLog.send_at}}</p>
-                        <p>
-                          <span style="color:green">错误名字:</span>
-                          {{alarmLog.error_name}}
-                        </p>
-                        <Collapse simple v-model="openMessageIndexList">
-                          <Panel :name="index.toString()">详细信息
-                            <p slot="content">{{alarmLog.message}}</p>
-                          </Panel>
-                        </Collapse>
-                    </TimelineItem>
-                </Timeline>
-            </Card>
-        </TabPane> -->
-    </Tabs>
-  </Card>
+      </Col>
+      <Col span="8">
+        <Card shadow>
+          <div class="summary-item">
+            <span class="summary-label">规则数</span>
+            <span class="summary-value">{{ configCount }}</span>
+          </div>
+        </Card>
+      </Col>
+      <Col span="8">
+        <Card shadow>
+          <div class="summary-item">
+            <span class="summary-label">错误类型</span>
+            <span class="summary-value">{{ errorNameCount }}</span>
+          </div>
+        </Card>
+      </Col>
+    </Row>
+
+    <Card
+      shadow
+      class="chart-card"
+    >
+      <p slot="title">报警趋势</p>
+      <StackArea
+        :height="420"
+        :data="lineData.dataList"
+        :scale="lineData.scale"
+        :isSpinShow="isLoading.stackArea"
+      />
+    </Card>
+
+    <Card
+      shadow
+      class="log-card"
+    >
+      <div
+        slot="title"
+        class="log-card-title"
+      >
+        <span>报警明细</span>
+        <div class="log-actions">
+          <Input
+            v-model="keyword"
+            clearable
+            icon="ios-search"
+            placeholder="搜索错误名、消息或配置ID"
+            class="keyword-input"
+            @on-change="handleKeywordChange"
+            @on-clear="handleKeywordChange"
+          />
+          <Button
+            icon="md-refresh"
+            @click="refreshAll"
+          >刷新</Button>
+        </div>
+      </div>
+      <Table
+        :columns="alarmLogColumns"
+        :data="displayAlarmLogList"
+        :loading="isLoading.logList"
+        :height="430"
+      />
+      <Page
+        v-if="filteredAlarmLogList.length > page.pageSize"
+        :current="page.current"
+        :total="filteredAlarmLogList.length"
+        :page-size="page.pageSize"
+        show-total
+        class="the-page-position"
+        @on-change="handlePageChange"
+      />
+    </Card>
+  </div>
 </template>
+
 <script>
 import { getAlarmLog, getLineAlarmLog } from '@/api/alarm'
 import moment from 'moment'
 import StackArea from '@/view/components/viser-stack/viser-stack.vue'
 import TimeBar from '@/view/components/time-bar'
 
+const DISPLAY_TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss'
+
 export default {
   name: 'alarm-log',
+  components: {
+    StackArea,
+    TimeBar
+  },
   data () {
     return {
       alarmLogList: [],
-      openMessageIndexList: [],
-      nowDate: new Date(),
-      initTimeRange: [moment().format('HH:00'), '23:59'],
-      timeRange: [moment().format('HH:00'), '23:59'],
-      dateRange: [moment().startOf('day').unix(), moment().unix()],
-      selectDate: moment().format('YYYY-MM-DD'),
-      showDetail: false,
-      totalLogCount: 0,
-      isShow: {
-        timeLineNoData: false,
-        stackAreaText: false
+      keyword: '',
+      dateRange: [moment().startOf('day').unix(), moment().endOf('day').unix()],
+      page: {
+        current: 1,
+        pageSize: 10
       },
       isLoading: {
-        stackArea: true
+        stackArea: true,
+        logList: true
       },
       lineData: {
         dataList: [],
@@ -98,89 +132,214 @@ export default {
           },
           {
             dataKey: 'index',
-            tickCount: 15,
-            alias: '日期'
+            tickCount: 12,
+            alias: '时间'
           }
         ]
-      }
+      },
+      alarmLogColumns: [
+        {
+          type: 'expand',
+          width: 60,
+          render: (h, params) => {
+            const message = params.row.message || ''
+            return h('pre', {
+              class: 'alarm-log-message'
+            }, message)
+          }
+        },
+        {
+          title: '报警时间',
+          key: 'send_at_display',
+          width: 170,
+          align: 'center'
+        },
+        {
+          title: '配置ID',
+          key: 'config_id',
+          width: 90,
+          align: 'center'
+        },
+        {
+          title: '错误名称',
+          key: 'error_name',
+          minWidth: 220
+        },
+        {
+          title: '报警内容',
+          key: 'message',
+          minWidth: 420,
+          render: (h, params) => {
+            return h('div', {
+              class: 'message-brief',
+              attrs: {
+                title: params.row.message
+              }
+            }, params.row.message)
+          }
+        }
+      ]
+    }
+  },
+  computed: {
+    filteredAlarmLogList () {
+      const keyword = this.keyword.trim().toLowerCase()
+      if (keyword.length === 0) return this.alarmLogList
+      return this.alarmLogList.filter(item => {
+        const searchText = [
+          item.config_id,
+          item.error_name,
+          item.message,
+          item.send_at_display
+        ].join(' ').toLowerCase()
+        return searchText.indexOf(keyword) >= 0
+      })
+    },
+    displayAlarmLogList () {
+      const start = (this.page.current - 1) * this.page.pageSize
+      const end = start + this.page.pageSize
+      return this.filteredAlarmLogList.slice(start, end)
+    },
+    configCount () {
+      return new Set(this.filteredAlarmLogList.map(item => item.config_id)).size
+    },
+    errorNameCount () {
+      return new Set(this.filteredAlarmLogList.map(item => item.error_name)).size
     }
   },
   mounted () {
-    this.getAlarmLog()
-    this.getLineAlarmLog()
-  },
-  components: {
-    StackArea,
-    TimeBar
+    this.refreshAll()
   },
   methods: {
+    async refreshAll () {
+      await Promise.all([
+        this.getAlarmLog(),
+        this.getLineAlarmLog()
+      ])
+    },
     async getAlarmLog () {
-      const startMoment = moment(this.selectDate + ' ' + this.timeRange[0])
-      const endMoment = moment(
-        moment(this.selectDate + ' ' + this.timeRange[1]).format(
-          'YYYY-MM-DD HH:mm:59'
-        )
-      )
-      const { data: dataList } = await getAlarmLog({
-        st: startMoment.unix() * 1000,
-        et: endMoment.unix() * 1000
-      })
-      for (let data of dataList) {
-        data['send_at'] = moment
-          .unix(data['send_at'])
-          .format('YYYY-MM-DD HH:mm:ss')
+      this.$set(this.isLoading, 'logList', true)
+      try {
+        const { data: dataList = [] } = await getAlarmLog({
+          st: this.dateRange[0] * 1000,
+          et: this.dateRange[1] * 1000
+        })
+        const recordList = dataList.map(item => {
+          return {
+            ...item,
+            send_at_display: moment.unix(item.send_at).format(DISPLAY_TIME_FORMAT)
+          }
+        })
+        this.$set(this, 'alarmLogList', recordList)
+        this.resetPageIfNeeded()
+      } catch (e) {
+        this.$Message.error('报警日志加载失败')
+      } finally {
+        this.$set(this.isLoading, 'logList', false)
       }
-
-      const len = dataList.length
-      this.$set(this.isShow, 'timeLineNoData', len === 0)
-      this.$set(this, 'alarmLogList', dataList)
-      this.$set(this, 'totalLogCount', len)
-      this.$nextTick(() => {
-        this.openMessage()
-      })
     },
     async getLineAlarmLog () {
-      // 默认七天
       this.$set(this.isLoading, 'stackArea', true)
-      const { data: dataList } = await getLineAlarmLog({
-        st: this.dateRange[0],
-        et: this.dateRange[1]
-      })
-      this.$set(this.lineData, 'dataList', dataList)
-      this.$set(this.isLoading, 'stackArea', false)
-    },
-    handelToggle (value) {
-      this.showDetail = value
-      this.openMessage()
-    },
-    openMessage () {
-      if (this.showDetail) {
-        this.openMessageIndexList = Object.keys(this.alarmLogList)
-      } else {
-        this.openMessageIndexList = []
+      try {
+        const { data: dataList = [] } = await getLineAlarmLog({
+          st: this.dateRange[0],
+          et: this.dateRange[1]
+        })
+        this.$set(this.lineData, 'dataList', dataList)
+      } catch (e) {
+        this.$Message.error('报警趋势加载失败')
+      } finally {
+        this.$set(this.isLoading, 'stackArea', false)
       }
     },
-    handleTimeChange (timeRange) {
-      this.timeRange = timeRange
-      this.getAlarmLog()
-    },
-    handleDateChange (date) {
-      this.selectDate = date
-      this.getAlarmLog()
-    },
     handleQuickDateChange (timeRange) {
-      this.dateRange[0] = moment(timeRange.dateRange[0]).unix()
-      this.dateRange[1] = moment(timeRange.dateRange[1]).unix()
-      this.getLineAlarmLog()
+      this.dateRange = [
+        moment(timeRange.dateRange[0]).unix(),
+        moment(timeRange.dateRange[1]).unix()
+      ]
+      this.page.current = 1
+      this.refreshAll()
     },
-    isDateDisabled (testDate) {
-      let testAt = moment(testDate).startOf('day').unix()
-      let nowAt = moment().startOf('day').unix()
-      // 只能查看最近7天的数据
-      let isSelectable = (nowAt - 86400 * 14) <= testAt && testAt <= nowAt
-      return isSelectable === false
+    handleKeywordChange () {
+      this.page.current = 1
+    },
+    handlePageChange (current) {
+      this.page.current = current
+    },
+    resetPageIfNeeded () {
+      const maxPage = Math.max(Math.ceil(this.filteredAlarmLogList.length / this.page.pageSize), 1)
+      if (this.page.current > maxPage) {
+        this.page.current = maxPage
+      }
     }
   }
 }
 </script>
 
+<style lang="less" scoped>
+.alarm-log-page {
+  .summary-row,
+  .chart-card,
+  .log-card {
+    margin-top: 16px;
+  }
+
+  .summary-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+  }
+
+  .summary-label {
+    color: #808695;
+    font-size: 14px;
+  }
+
+  .summary-value {
+    color: #17233d;
+    font-size: 24px;
+    font-weight: 600;
+  }
+
+  .log-card-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .log-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .keyword-input {
+    width: 260px;
+    margin-right: 8px;
+  }
+
+  .the-page-position {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+</style>
+
+<style lang="less">
+.alarm-log-message {
+  max-height: 220px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #f8f8f9;
+}
+
+.message-brief {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

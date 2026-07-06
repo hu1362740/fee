@@ -36,7 +36,7 @@ class SystemBrowserSummary extends Base {
       return false
     }
     let sumaryAt = moment(sumaryAtTime, DATE_FORMAT.COMMAND_ARGUMENT_BY_UNIT[countType]).unix()
-    MSystemBrowser.summarySystemBrowser(sumaryAt)
+    await MSystemBrowser.summarySystemBrowser(sumaryAt)
   }
 
   /**

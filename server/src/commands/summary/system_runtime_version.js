@@ -36,7 +36,7 @@ class SystemRuntimeVersionSummary extends Base {
       return false
     }
     let sumaryAt = moment(sumaryAtTime, DATE_FORMAT.COMMAND_ARGUMENT_BY_UNIT[countType]).unix()
-    MSystemRuntimeVersion.sumarySystemRuntimeVersion(sumaryAt)
+    await MSystemRuntimeVersion.sumarySystemRuntimeVersion(sumaryAt)
   }
 
   /**

@@ -292,8 +292,8 @@ class TaskManager extends Base {
 
         'Summary:SystemBrowser',
         'Summary:SystemDevice',
-        'Summary:SystemOS'
-        // 'Summary:SystemRuntimeVersion'
+        'Summary:SystemOS',
+        'Summary:SystemRuntimeVersion'
       ]
       for (let summaryCommand of summaryByMonthCommandList) {
         // 当月数据

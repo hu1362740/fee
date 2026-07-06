@@ -36,7 +36,7 @@ class SystemDeviceSummary extends Base {
       return false
     }
     let sumaryAt = moment(sumaryAtTime, DATE_FORMAT.COMMAND_ARGUMENT_BY_UNIT[countType]).unix()
-    MSystemDevice.summarySystemDevice(sumaryAt)
+    await MSystemDevice.summarySystemDevice(sumaryAt)
   }
 
   /**

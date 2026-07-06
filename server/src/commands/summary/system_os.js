@@ -36,7 +36,7 @@ class SystemOsSummary extends Base {
       return false
     }
     let sumaryAt = moment(sumaryAtTime, DATE_FORMAT.COMMAND_ARGUMENT_BY_UNIT[countType]).unix()
-    MSystemOs.summarySystemOs(sumaryAt)
+    await MSystemOs.summarySystemOs(sumaryAt)
   }
 
   /**

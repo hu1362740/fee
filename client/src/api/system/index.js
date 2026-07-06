@@ -40,3 +40,11 @@ export const getDeviceDistribution = (params) => {
     params
   })
 }
+
+export const getRuntimeVersionDistribution = (params) => {
+  return axios.request({
+    url: `project/${getProjectId()}/api/runtimeVersion`,
+    method: 'get',
+    params
+  })
+}

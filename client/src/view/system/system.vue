@@ -350,7 +350,7 @@ export default {
     return {
       PIE_TOP_COUNT,
       activeTab: 'browser',
-      currentMonth: moment().format('YYYY-MM'),
+      currentMonth: moment().toDate(),
       lastUpdatedAt: '',
       isRefreshing: false,
       chartInstances: {},
@@ -459,6 +459,9 @@ export default {
       }
       return topList
     },
+    formatQueryMonth () {
+      return moment(this.currentMonth).format('YYYY-MM')
+    },
     getOrInitChart (refName) {
       if (!this.$refs[refName]) return null
       if (!this.chartInstances[refName]) {
@@ -513,7 +516,7 @@ export default {
       this.renderActiveTab()
     },
     onMonthChange (month) {
-      this.currentMonth = month || moment().format('YYYY-MM')
+      this.currentMonth = month ? moment(month).toDate() : moment().toDate()
       this.selectedBrowser = ''
       this.refreshAll()
     },
@@ -521,7 +524,7 @@ export default {
       this.renderActiveTab()
     },
     async loadBrowserData () {
-      const params = { month: this.currentMonth }
+      const params = { month: this.formatQueryMonth() }
       this.$set(this.loading, 'browser', true)
       try {
         const [listRes, allRes] = await Promise.all([
@@ -570,7 +573,7 @@ export default {
     async loadBrowserVersionData (browser) {
       this.$set(this.loading, 'browserVersion', true)
       try {
-        const res = await getBrowserDistribution({ month: this.currentMonth, q: browser })
+        const res = await getBrowserDistribution({ month: this.formatQueryMonth(), q: browser })
         const list = _.get(res, ['data'], [])
         this.browserVersionRawData = list
           .map(item => ({ name: String(item.key || '未知'), value: Number(item.value || 0) }))
@@ -585,7 +588,7 @@ export default {
     async loadOsData () {
       this.$set(this.loading, 'os', true)
       try {
-        const res = await getOsDistribution({ month: this.currentMonth })
+        const res = await getOsDistribution({ month: this.formatQueryMonth() })
         const list = _.get(res, ['data'], [])
         const osMap = {}
         for (let item of list) {
@@ -616,7 +619,7 @@ export default {
     async loadDeviceData () {
       this.$set(this.loading, 'device', true)
       try {
-        const res = await getDeviceDistribution({ month: this.currentMonth })
+        const res = await getDeviceDistribution({ month: this.formatQueryMonth() })
         const list = _.get(res, ['data'], [])
         const vendorMap = {}
         for (let item of list) {
@@ -647,7 +650,7 @@ export default {
     async loadRuntimeData () {
       this.$set(this.loading, 'runtime', true)
       try {
-        const res = await getRuntimeVersionDistribution({ month: this.currentMonth })
+        const res = await getRuntimeVersionDistribution({ month: this.formatQueryMonth() })
         const list = _.get(res, ['data'], [])
         this.runtimePieRawData = list
           .map(item => ({ name: item.type || '未知', value: Number(item.value || 0) }))

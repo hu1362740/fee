@@ -83,7 +83,7 @@
   import maxLogo from '@/assets/images/logo.png'
   import './main.less'
   import { getProjectList } from '@/api/project'
-  // import { getLoginUserInfo } from '@/api/user.js'
+  import { getLoginUserInfo } from '@/api/user.js'
   import ToolTip from '@/view/components/toolTip'
 
   export default {
@@ -172,6 +172,7 @@
       },
       async getProjectList () {
         const res = await getProjectList()
+        const userRes = await getLoginUserInfo()
         const list = res.data
         let map = {}
         list.map(element => {
@@ -179,7 +180,10 @@
             map[element.id] = element
           }
         })
-        if (map[getProjectId()].role === 'owner') {
+        const currentProject = map[getProjectId()]
+        if (userRes.data.role === 'admin') {
+          this.$store.commit('setAccess', ['admin', 'owner'])
+        } else if (currentProject && currentProject.role === 'owner') {
           this.$store.commit('setAccess', ['owner'])
         } else {
           this.$store.commit('setAccess', ['dev'])

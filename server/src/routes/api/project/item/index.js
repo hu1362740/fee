@@ -47,10 +47,18 @@ let add = RouterConfigBuilder.routerConfigBuilder('/api/project/item/add', Route
     create_ucid: createUcid,
     update_ucid: updateUcid
   }
-  let isSuccess = await MProject.add(insertData)
+  let projectId = await MProject.add(insertData)
 
-  if (isSuccess) {
-    res.send(API_RES.showResult([], '添加成功'))
+  if (projectId > 0) {
+    await MProjetMember.add({
+      ucid: createUcid,
+      project_id: projectId,
+      role: MProjetMember.ROLE_OWNER,
+      need_alarm: 0,
+      create_ucid: createUcid,
+      update_ucid: updateUcid
+    })
+    res.send(API_RES.showResult({ id: projectId }, '添加成功'))
   } else {
     res.send(API_RES.showError('添加失败'))
   }
@@ -108,7 +116,7 @@ let list = RouterConfigBuilder.routerConfigBuilder('/api/project/item/list', Rou
 
 let deleteProject = RouterConfigBuilder.routerConfigBuilder('/api/project/item/delete', RouterConfigBuilder.METHOD_TYPE_POST, async (req, res) => {
   let id = parseInt(_.get(req, ['body', 'id'], 0))
-  let updateUcid = parseInt(_.get(req, ['fee', 'user', 'ucid'], '0'))
+  let updateUcid = _.get(req, ['fee', 'user', 'ucid'], '0')
   if (_.isInteger(id) === false) {
     res.send(API_RES.showError('参数错误'))
     return
@@ -139,18 +147,19 @@ let update = RouterConfigBuilder.routerConfigBuilder('/api/project/item/update',
   let updateUcid = _.get(req, ['fee', 'user', 'ucid'], '0')
 
   let updateRecord = {}
-  for (let itemKey of [
-    'displayName',
-    'projectName',
-    'cDesc'
-  ]) {
+  const fieldMap = {
+    displayName: 'display_name',
+    projectName: 'project_name',
+    cDesc: 'c_desc'
+  }
+  for (let itemKey of Object.keys(fieldMap)) {
     if (_.has(body, itemKey)) {
-      updateRecord[itemKey] = _.get(body, [itemKey], '')
+      updateRecord[fieldMap[itemKey]] = _.get(body, [itemKey], '')
     }
   }
 
   // 检查权限
-  if (_.has(updateRecord, ['projectName'])) {
+  if (_.has(updateRecord, ['project_name'])) {
     let isAdmin = await MUser.isAdmin(updateUcid)
     if (isAdmin === false) {
       return res.send(API_RES.noPrivilege('只有管理员才可以修改projectName字段'))

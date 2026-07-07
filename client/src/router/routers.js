@@ -9,6 +9,7 @@ import ViewPerformance from '@/view/performance'
 import AlarmConfig from '@/view/alarm-config/index.vue'
 import AlarmLog from '@/view/alarm-log/index.vue'
 import Management from '@/view/management/index.vue'
+import ProjectManagement from '@/view/project-management/index.vue'
 import SystemEnv from '@/view/system/system.vue'
 import ErrorPage401 from '@/view/error-page/401.vue'
 import ErrorPage500 from '@/view/error-page/500.vue'
@@ -196,6 +197,25 @@ export default [
           title: '环境分布',
         },
         component: SystemEnv,
+      },
+    ],
+  },
+  {
+    path: '/project/:id/projectManage',
+    name: '项目',
+    component: Main,
+    meta: {
+      access: ['admin'],
+    },
+    children: [
+      {
+        path: 'management',
+        name: 'ProjectManagement',
+        meta: {
+          icon: 'md-folder',
+          title: '项目管理',
+        },
+        component: ProjectManagement,
       },
     ],
   },

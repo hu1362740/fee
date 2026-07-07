@@ -43,6 +43,23 @@
             placeholder="请输入项目说明"
           />
         </FormItem>
+        <FormItem v-if="isEdit === false" label="项目 owner" prop="ownerUcid">
+          <Select
+            v-model="projectForm.ownerUcid"
+            filterable
+            remote
+            clearable
+            :loading="ownerLoading"
+            :remote-method="searchOwner"
+            placeholder="请输入 owner 账号"
+          >
+            <Option
+              v-for="item in ownerUserList"
+              :key="item.ucid"
+              :value="item.ucid"
+            >{{ item.account }}</Option>
+          </Select>
+        </FormItem>
       </Form>
     </Modal>
   </div>
@@ -50,12 +67,14 @@
 
 <script>
 import { addProject, deleteProject, getProjectList, updateProject } from '@/api/project'
+import { getUserSearch } from '@/api/user'
 
 const EMPTY_FORM = {
   id: 0,
   projectName: '',
   displayName: '',
-  cDesc: ''
+  cDesc: '',
+  ownerUcid: ''
 }
 
 export default {
@@ -65,6 +84,8 @@ export default {
       projectList: [],
       modalVisible: false,
       isEdit: false,
+      ownerLoading: false,
+      ownerUserList: [],
       projectForm: {
         ...EMPTY_FORM
       },
@@ -74,6 +95,9 @@ export default {
         ],
         displayName: [
           { required: true, message: '显示名称不能为空', trigger: 'blur' }
+        ],
+        ownerUcid: [
+          { required: true, message: '项目 owner 不能为空', trigger: 'change' }
         ]
       },
       columns: [
@@ -192,7 +216,8 @@ export default {
         id: row.id,
         projectName: row.project_name,
         displayName: row.display_name,
-        cDesc: row.c_desc
+        cDesc: row.c_desc,
+        ownerUcid: ''
       }
     },
     saveProject () {
@@ -216,6 +241,23 @@ export default {
         }
       })
     },
+    async searchOwner (query) {
+      if (query === '') {
+        this.ownerUserList = []
+        return
+      }
+      this.ownerLoading = true
+      const res = await getUserSearch({
+        account: query,
+        st: new Date()
+      }).catch(() => {
+        return {
+          data: []
+        }
+      })
+      this.ownerUserList = res.data
+      this.ownerLoading = false
+    },
     confirmDelete (row) {
       this.$Modal.confirm({
         title: '确认删除项目?',
@@ -235,6 +277,8 @@ export default {
       this.projectForm = {
         ...EMPTY_FORM
       }
+      this.ownerUserList = []
+      this.ownerLoading = false
       if (this.$refs.projectForm) {
         this.$refs.projectForm.resetFields()
       }

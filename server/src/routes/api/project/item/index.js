@@ -57,6 +57,7 @@ let add = RouterConfigBuilder.routerConfigBuilder('/api/project/item/add', Route
   let displayName = _.get(body, ['displayName'], '')
   let projectName = _.get(body, ['projectName'], '')
   let cDesc = _.get(body, ['cDesc'], '')
+  let ownerUcid = String(_.get(body, ['ownerUcid'], ''))
   let createUcid = _.get(req, ['fee', 'user', 'ucid'], '0')
   let updateUcid = createUcid
 
@@ -64,6 +65,14 @@ let add = RouterConfigBuilder.routerConfigBuilder('/api/project/item/add', Route
   let isAdmin = await MUser.isAdmin(createUcid)
   if (isAdmin === false) {
     return res.send(API_RES.noPrivilege('只有管理员才可以添加项目'))
+  }
+
+  if (_.isEmpty(ownerUcid)) {
+    return res.send(API_RES.showError('项目 owner 不能为空'))
+  }
+  let ownerUser = await MUser.get(ownerUcid)
+  if (_.isEmpty(ownerUser) || _.get(ownerUser, ['is_delete'], 1) === 1) {
+    return res.send(API_RES.showError('项目 owner 不存在或已注销'))
   }
 
   let existedProject = await MProject.getByProjectName(projectName)
@@ -81,7 +90,7 @@ let add = RouterConfigBuilder.routerConfigBuilder('/api/project/item/add', Route
     })
     let isOwnerReady = false
     if (isRestoreSuccess) {
-      isOwnerReady = await ensureProjectOwner(existedProjectId, createUcid, updateUcid)
+      isOwnerReady = await ensureProjectOwner(existedProjectId, ownerUcid, updateUcid)
     }
 
     if (isRestoreSuccess && isOwnerReady) {
@@ -102,7 +111,7 @@ let add = RouterConfigBuilder.routerConfigBuilder('/api/project/item/add', Route
   let projectId = await MProject.add(insertData)
 
   if (projectId > 0) {
-    let isOwnerReady = await ensureProjectOwner(projectId, createUcid, updateUcid)
+    let isOwnerReady = await ensureProjectOwner(projectId, ownerUcid, updateUcid)
     if (isOwnerReady) {
       res.send(API_RES.showResult({ id: projectId }, '添加成功'))
     } else {

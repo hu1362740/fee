@@ -63,7 +63,7 @@ async function add (data) {
     `project_id`,
     `ucid`,
     `role`,
-    `nead_alarm`,
+    `need_alarm`,
     `create_ucid`,
     `update_ucid`
   ]) {

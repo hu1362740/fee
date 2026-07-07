@@ -40,8 +40,8 @@ let add = RouterConfigBuilder.routerConfigBuilder('/api/project/member/add', Rou
 
   let anyOneSuccess = false
   for (let ucid of ucidList) {
-    ucid = parseInt(ucid)
-    if (_.isInteger(ucid) === false || ucid <= 0) {
+    ucid = String(ucid)
+    if (_.isEmpty(ucid)) {
       // ucid不合法
       continue
     }
@@ -200,7 +200,7 @@ let list = RouterConfigBuilder.routerConfigBuilder('/api/project/member/list', R
 let deleteProject = RouterConfigBuilder.routerConfigBuilder('/api/project/member/delete', RouterConfigBuilder.METHOD_TYPE_GET, async (req, res) => {
   let id = parseInt(_.get(req, ['query', 'id'], 0))
   let projectId = _.get(req, ['fee', 'project', 'projectId'], 1)
-  let updateUcid = parseInt(_.get(req, ['fee', 'user', 'ucid'], '0'))
+  let updateUcid = _.get(req, ['fee', 'user', 'ucid'], '0')
 
   if (_.isInteger(id) === false) {
     res.send(API_RES.showError('参数错误'))

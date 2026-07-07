@@ -359,12 +359,12 @@ TABLE_TEMPLATE[SINGLE_T_O_USER] = `(
 TABLE_TEMPLATE[SINGLE_T_O_PROJECT_MEMBER] = `(
     \`id\` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
     \`project_id\` bigint(20) unsigned NOT NULL DEFAULT '0' COMMENT '项目id',
-    \`ucid\` varchar(20) NOT NULL DEFAULT '' COMMENT '项目参与者ucid',
+    \`ucid\` varchar(50) NOT NULL DEFAULT '' COMMENT '项目参与者ucid',
     \`role\` varchar(20) NOT NULL DEFAULT '' COMMENT '参与者角色(owner => 组长, dev => 成员)',
     \`need_alarm\` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '是否需要报警(0 => 不需要, 1 => 需要)',
     \`is_delete\` tinyint(1) unsigned NOT NULL DEFAULT '0' COMMENT '是否已删除(0 => 未删除, 1 => 已删除)',
-    \`create_ucid\` varchar(20) NOT NULL DEFAULT '' COMMENT '创建者ucid',
-    \`update_ucid\` varchar(20) NOT NULL DEFAULT '' COMMENT '更新者ucid',
+    \`create_ucid\` varchar(50) NOT NULL DEFAULT '' COMMENT '创建者ucid',
+    \`update_ucid\` varchar(50) NOT NULL DEFAULT '' COMMENT '更新者ucid',
     \`create_time\` bigint(20) unsigned NOT NULL DEFAULT '0' COMMENT '创建此记录的时间',
     \`update_time\` bigint(20) unsigned NOT NULL DEFAULT '0' COMMENT '更新此记录的时间',
     PRIMARY KEY (\`id\`)

@@ -41,7 +41,7 @@ export const logout = (token) => {
 
 export const getUserSearch = (params) => {
   return axios.request({
-    url: `api/user/search_uc`,
+    url: `api/user/search`,
     method: 'get',
     headers: { 'Content-Type': 'application/json' },
     params: {

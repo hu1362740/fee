@@ -2,6 +2,7 @@ import _ from 'lodash'
 import Auth from '~/src/library/auth'
 import API_RES from '~/src/constants/api_res'
 import MProjectMember from '~/src/model/project/project_member'
+import MUser from '~/src/model/project/user'
 import Logger from '~/src/library/logger'
 /**
  * 将用户信息更新到req对象中
@@ -39,10 +40,21 @@ function appendProjectInfo (req, res, next) {
  * @param {*} res
  * @param {*} next
  */
-function checkLogin (req, res, next) {
+async function checkLogin (req, res, next) {
   let ucid = _.get(req, ['fee', 'user', 'ucid'], 0)
-  if (ucid === 0) {
+  if (ucid === 0 || ucid === '0') {
     Logger.log('没有登录')
+    res.send(API_RES.needLoginIn())
+    return
+  }
+  let rawUser = await MUser.get(ucid)
+  if (_.isEmpty(rawUser) || rawUser.is_delete === 1) {
+    Logger.log('用户不存在或已注销')
+    res.clearCookie('fee_token')
+    res.clearCookie('ucid')
+    res.clearCookie('nickname')
+    res.clearCookie('name')
+    res.clearCookie('account')
     res.send(API_RES.needLoginIn())
     return
   }

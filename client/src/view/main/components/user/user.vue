@@ -187,9 +187,10 @@ export default {
       })
     },
     async destroyAccount () {
-      const result = await apiCancelAccount()
+      const result = await apiDestroyAccount()
       this.$Message.info(result.msg)
       if (result.action === 'success') {
+        await this.handleLogOut()
         this.$nextTick(() => {
           this.$router.push({
             name: 'login'

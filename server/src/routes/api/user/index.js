@@ -212,9 +212,9 @@ const modifyMsg = RouterConfigBuilder.routerConfigBuilder('/api/user/modify/msg'
 
 const destroyAccount = RouterConfigBuilder.routerConfigBuilder('/api/user/destroy', RouterConfigBuilder.METHOD_TYPE_GET, async (req, res) => {
   const ucid = _.get(req, ['fee', 'user', 'ucid'], 0)
-  const rawUser = MUser.get(ucid)
+  const rawUser = await MUser.get(ucid)
 
-  if (_.isEmpty(rawUser) === false || rawUser.is_delete === 1) {
+  if (_.isEmpty(rawUser) || rawUser.is_delete === 1) {
     res.send(API_RES.showError('用户不存在'))
     return
   }
@@ -226,6 +226,7 @@ const destroyAccount = RouterConfigBuilder.routerConfigBuilder('/api/user/destro
     res.clearCookie('fee_token')
     res.clearCookie('ucid')
     res.clearCookie('nickname')
+    res.clearCookie('name')
     res.clearCookie('account')
     res.send(API_RES.showResult([], '注销成功'))
   } else {

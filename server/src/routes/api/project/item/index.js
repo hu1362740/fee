@@ -8,6 +8,32 @@ import MUser from '~/src/model/project/user'
 import MProject from '~/src/model/project/project'
 import MProjetMember from '~/src/model/project/project_member'
 
+async function ensureProjectOwner (projectId, ucid, updateUcid) {
+  let member = await MProjetMember.getByProjectIdAndUcid(projectId, ucid)
+  if (_.isEmpty(member)) {
+    return MProjetMember.add({
+      ucid,
+      project_id: projectId,
+      role: MProjetMember.ROLE_OWNER,
+      need_alarm: 0,
+      create_ucid: updateUcid,
+      update_ucid: updateUcid
+    })
+  }
+
+  let isActiveOwner = _.get(member, ['is_delete'], 1) === 0 && _.get(member, ['role'], MProjetMember.ROLE_DEV) === MProjetMember.ROLE_OWNER
+  if (isActiveOwner) {
+    return true
+  }
+
+  return MProjetMember.update(_.get(member, ['id']), {
+    role: MProjetMember.ROLE_OWNER,
+    need_alarm: _.get(member, ['need_alarm'], 0),
+    is_delete: 0,
+    update_ucid: updateUcid
+  })
+}
+
 let detail = RouterConfigBuilder.routerConfigBuilder('/api/project/item/detail', RouterConfigBuilder.METHOD_TYPE_GET, async (req, res) => {
   let id = parseInt(_.get(req, ['query', 'id'], 0))
 
@@ -40,6 +66,32 @@ let add = RouterConfigBuilder.routerConfigBuilder('/api/project/item/add', Route
     return res.send(API_RES.noPrivilege('只有管理员才可以添加项目'))
   }
 
+  let existedProject = await MProject.getByProjectName(projectName)
+  if (_.isEmpty(existedProject) === false) {
+    let existedProjectId = _.get(existedProject, ['id'], 0)
+    if (_.get(existedProject, ['is_delete'], 1) === 0) {
+      return res.send(API_RES.showError('项目标识已存在，请换一个项目标识'))
+    }
+
+    let isRestoreSuccess = await MProject.update(existedProjectId, {
+      display_name: displayName,
+      c_desc: cDesc,
+      is_delete: 0,
+      update_ucid: updateUcid
+    })
+    let isOwnerReady = false
+    if (isRestoreSuccess) {
+      isOwnerReady = await ensureProjectOwner(existedProjectId, createUcid, updateUcid)
+    }
+
+    if (isRestoreSuccess && isOwnerReady) {
+      res.send(API_RES.showResult({ id: existedProjectId, restored: true }, '添加成功'))
+    } else {
+      res.send(API_RES.showError('添加失败'))
+    }
+    return
+  }
+
   let insertData = {
     project_name: projectName,
     display_name: displayName,
@@ -50,15 +102,12 @@ let add = RouterConfigBuilder.routerConfigBuilder('/api/project/item/add', Route
   let projectId = await MProject.add(insertData)
 
   if (projectId > 0) {
-    await MProjetMember.add({
-      ucid: createUcid,
-      project_id: projectId,
-      role: MProjetMember.ROLE_OWNER,
-      need_alarm: 0,
-      create_ucid: createUcid,
-      update_ucid: updateUcid
-    })
-    res.send(API_RES.showResult({ id: projectId }, '添加成功'))
+    let isOwnerReady = await ensureProjectOwner(projectId, createUcid, updateUcid)
+    if (isOwnerReady) {
+      res.send(API_RES.showResult({ id: projectId }, '添加成功'))
+    } else {
+      res.send(API_RES.showError('添加失败'))
+    }
   } else {
     res.send(API_RES.showError('添加失败'))
   }

@@ -87,7 +87,6 @@ async function add (data) {
     is_delete: 0 // 默认未删除
   }
   let insertResult = await Knex
-    .returning('id') // 返回新插入记录的 ID
     .insert(insertData)
     .into(tableName)
     .catch(err => {
@@ -95,8 +94,12 @@ async function add (data) {
       return []
     })
   let id = _.get(insertResult, [0], 0)
+  if (_.isObject(id)) {
+    id = _.get(id, ['id'], _.get(id, ['insertId'], 0))
+  }
+  id = parseInt(id, 10)
 
-  return id
+  return Number.isNaN(id) ? 0 : id
 }
 
 /**
@@ -112,6 +115,25 @@ async function get (id) {
     .where('id', '=', id)
     .catch(err => {
       Logger.log(err.message, 'project_item    get   出错')
+      return []
+    })
+  let project = _.get(result, ['0'], {})
+  return project
+}
+
+/**
+ * 根据项目标识获取项目，包括已软删除项目
+ * @param {string} projectName - 项目标识
+ * @returns {object} 项目信息对象，若不存在则返回空对象
+ */
+async function getByProjectName (projectName) {
+  let tableName = getTableName()
+  let result = await Knex
+    .select(TABLE_COLUMN)
+    .from(tableName)
+    .where('project_name', '=', projectName)
+    .catch(err => {
+      Logger.log(err.message, 'project_item    getByProjectName   出错')
       return []
     })
   let project = _.get(result, ['0'], {})
@@ -197,6 +219,7 @@ async function getProjectListById (idList) {
 
 export default {
   get,
+  getByProjectName,
   getList,
   update,
   getTableName,

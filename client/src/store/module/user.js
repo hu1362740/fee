@@ -7,6 +7,7 @@ export default {
     userId: '',
     avatorImgPath: '',
     token: getToken(),
+    role: '',
     access: []
   },
   mutations: {
@@ -21,6 +22,9 @@ export default {
     },
     setAccess (state, access) {
       state.access = access
+    },
+    setRole (state, role) {
+      state.role = role
     },
     setToken (state, token) {
       state.token = token
@@ -59,6 +63,7 @@ export default {
         logout(state.token).then(() => {
           commit('setToken', '')
           commit('setAccess', [])
+          commit('setRole', '')
           resolve()
         }).catch(err => {
           reject(err)

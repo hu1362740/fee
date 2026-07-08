@@ -70,7 +70,11 @@
       changeMenu (id) {
         this.projectName = _.get(this.projectMap, [id, 'display_name'], '^_^')
         this.rate = _.get(this.projectMap, [id, 'rate'], 10000) / 10000 * 100
-        if (this.projectMap[id].role === 'owner') { this.$store.commit('setAccess', ['owner']) } else {
+        if (this.$store.state.user.role === 'admin') {
+          this.$store.commit('setAccess', ['admin', 'owner'])
+        } else if (this.projectMap[id].role === 'owner') {
+          this.$store.commit('setAccess', ['owner'])
+        } else {
           this.$store.commit('setAccess', ['dev'])
         }
         this.$router.push(

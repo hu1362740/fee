@@ -181,6 +181,7 @@
           }
         })
         const currentProject = map[getProjectId()]
+        this.$store.commit('setRole', userRes.data.role)
         if (userRes.data.role === 'admin') {
           this.$store.commit('setAccess', ['admin', 'owner'])
         } else if (currentProject && currentProject.role === 'owner') {

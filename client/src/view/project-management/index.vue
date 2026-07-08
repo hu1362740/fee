@@ -13,7 +13,6 @@
     <Modal
       v-model="modalVisible"
       :title="modalTitle"
-      @on-ok="saveProject"
       @on-cancel="resetForm"
     >
       <Form
@@ -61,6 +60,14 @@
           />
         </FormItem>
       </Form>
+      <div slot="footer">
+        <Button @click="cancelProject">取消</Button>
+        <Button
+          type="primary"
+          :loading="projectSaving"
+          @click="saveProject"
+        >确定</Button>
+      </div>
     </Modal>
   </div>
 </template>
@@ -85,6 +92,7 @@ export default {
       modalVisible: false,
       isEdit: false,
       ownerLoading: false,
+      projectSaving: false,
       ownerUserList: [],
       projectForm: {
         ...EMPTY_FORM
@@ -223,23 +231,26 @@ export default {
     saveProject () {
       this.$refs.projectForm.validate(async valid => {
         if (valid === false) {
-          this.$nextTick(() => {
-            this.modalVisible = true
-          })
           return
         }
-        const request = this.isEdit ? updateProject : addProject
-        const result = await request(this.projectForm)
-        this.$Message.info(result.msg)
-        if (result.action === 'success') {
-          this.resetForm()
-          await this.loadProjectList()
-        } else {
-          this.$nextTick(() => {
-            this.modalVisible = true
-          })
+        this.projectSaving = true
+        try {
+          const request = this.isEdit ? updateProject : addProject
+          const result = await request(this.projectForm)
+          this.$Message.info(result.msg)
+          if (result.action === 'success') {
+            this.modalVisible = false
+            this.resetForm()
+            await this.loadProjectList()
+          }
+        } finally {
+          this.projectSaving = false
         }
       })
+    },
+    cancelProject () {
+      this.modalVisible = false
+      this.resetForm()
     },
     async searchOwner (query) {
       if (query === '') {
@@ -279,6 +290,7 @@ export default {
       }
       this.ownerUserList = []
       this.ownerLoading = false
+      this.projectSaving = false
       if (this.$refs.projectForm) {
         this.$refs.projectForm.resetFields()
       }

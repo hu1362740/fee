@@ -35,14 +35,6 @@
             placeholder="请输入页面展示名称"
           />
         </FormItem>
-        <FormItem label="项目备注">
-          <Input
-            v-model="projectForm.cDesc"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入项目说明"
-          />
-        </FormItem>
         <FormItem v-if="isEdit === false" label="项目 owner" prop="ownerUcid">
           <Select
             v-model="projectForm.ownerUcid"
@@ -59,6 +51,14 @@
               :value="item.ucid"
             >{{ item.account }}</Option>
           </Select>
+        </FormItem>
+        <FormItem label="项目备注">
+          <Input
+            v-model="projectForm.cDesc"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入项目说明"
+          />
         </FormItem>
       </Form>
     </Modal>

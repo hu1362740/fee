@@ -15,10 +15,22 @@ const development = {
   database: 'platform'
 }
 // 测试环境配置
-const testing = development
+const testing = {
+  host: '127.0.0.1',
+  port: '3306',
+  user: 'fee_test',
+  password: '123456',
+  database: 'platform_test'
+}
 
 // 线上环境
-const production = testing
+const production = {
+  host: '127.0.0.1',
+  port: '3306',
+  user: 'fee_prod',
+  password: '123456',
+  database: 'platform_prod'
+}
 
 let config = {
   development,

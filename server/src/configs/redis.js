@@ -7,10 +7,16 @@ const development = {
   port: '6379'
 }
 // 测试环境配置
-const testing = development
+const testing = {
+  host: '127.0.0.1',
+  port: '6379'
+}
 
 // 线上环境配置
-const production = testing
+const production = {
+  host: '127.0.0.1',
+  port: '6379'
+}
 
 let config = {
   development,

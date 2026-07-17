@@ -451,6 +451,37 @@ sudo mkdir -p /opt/fee-pro
 sudo chown -R "$USER:$USER" /opt/fee-pro
 ```
 
+这两条命令建议在前面创建的普通部署用户 `fee` 下执行，也就是已经执行过 `su - fee` 之后再执行。不要在 `root` 用户下直接照抄第二行，否则 `$USER` 会展开成 `root`，目录仍然会归 `root` 所有。若当前仍是 `root`，可改成：
+
+```bash
+sudo chown -R fee:fee /opt/fee-pro
+```
+
+命令的基本格式是：
+
+```bash
+sudo <命令> <参数> <路径>
+mkdir -p <目录路径>
+chown -R <用户>:<用户组> <目录路径>
+```
+
+逐条说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `sudo mkdir -p /opt/fee-pro` | 用管理员权限创建 `/opt/fee-pro` 目录 | `/opt` 是系统目录，普通用户通常没有写权限；`mkdir` 用来创建目录，`-p` 表示父目录不存在时一并创建，目录已存在时也不报错 |
+| `sudo chown -R "$USER:$USER" /opt/fee-pro` | 用管理员权限把 `/opt/fee-pro` 的属主和属组改成当前用户 | `chown` 用来修改文件或目录所有者；`-R` 表示递归处理目录下已有内容；`$USER` 是当前登录用户变量，例如当前是 `fee` 时会展开成 `fee:fee` |
+
+是否必要：
+
+- 如果按本文默认把项目部署到 `/opt/fee-pro`，并用普通用户 `fee` 运行后续 `git clone`、`npm install`、`npm run build`、`pm2` 等命令，那么这一步是推荐且基本必要的。它可以避免后续因为目录归 `root` 所有而频繁遇到 `permission denied`，也避免用 `sudo npm install` 造成 `node_modules` 权限混乱。
+- 如果你把项目放在当前用户自己的目录下，例如 `/home/fee/fee-pro`，通常不需要这两条命令，可以直接 `mkdir -p ~/fee-pro`。
+- 如果 `/opt/fee-pro` 已经存在，并且确认属主已经是部署用户，可以跳过 `chown`。可用下面命令检查：
+
+```bash
+ls -ld /opt/fee-pro
+```
+
 ### 7.2 从你的仓库拉取
 
 把下面的 `<your-fee-pro-git-url>` 替换成你自己的仓库地址。

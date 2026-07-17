@@ -204,6 +204,85 @@ v12.22.12
 6.x.x
 ```
 
+这些命令分两组：前 3 行用于安装并加载 `nvm`，后面几行用于安装、选择和验证 Node.js 版本。基本格式如下：
+
+```bash
+curl <参数> <脚本地址> | bash
+export <变量名>=<变量值>
+[ -s <文件路径> ] && . <文件路径>
+
+nvm install <Node版本号>
+nvm alias default <Node版本号>
+nvm use <Node版本号>
+
+node -v
+npm -v
+```
+
+逐条说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh \| bash` | 下载 nvm 安装脚本并交给 `bash` 执行 | 安装 nvm。`-f` 表示请求失败时直接失败，`-sS` 表示静默但显示错误，`-L` 表示跟随重定向 |
+| `export NVM_DIR="$HOME/.nvm"` | 设置当前 shell 里的 `NVM_DIR` 环境变量 | 告诉当前终端 nvm 安装目录在哪里 |
+| `[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"` | 如果 `nvm.sh` 文件存在且非空，就加载它 | 让当前终端立即能使用 `nvm` 命令；重新登录后通常会由 shell 配置自动加载 |
+| `nvm install 12.22.12` | 安装指定 Node.js 版本 | 下载并安装 Node.js `12.22.12`，同时带上对应 npm |
+| `nvm alias default 12.22.12` | 设置默认 Node.js 版本 | 以后新打开终端时默认使用 Node.js `12.22.12` |
+| `nvm use 12.22.12` | 切换当前终端的 Node.js 版本 | 立即让当前终端使用 Node.js `12.22.12` |
+| `node -v` | 查看 Node.js 版本 | 确认当前终端实际使用的 Node.js 版本 |
+| `npm -v` | 查看 npm 版本 | 确认 npm 可用，Node.js 12 通常对应 npm 6.x |
+
+为什么这里不用 `sudo apt install nodejs npm`：
+
+| 方式 | 安装位置 | 是否需要 sudo | 特点 | 对本项目的影响 |
+| --- | --- | --- | --- | --- |
+| `sudo apt install nodejs npm` | 系统目录，例如 `/usr/bin` | 需要 | 由 Ubuntu 软件源决定版本，通常只能方便地维护系统级一个版本 | Ubuntu 新版仓库里的 Node.js 版本可能过新，不一定能直接安装 `12.22.12` |
+| `nvm install 12.22.12` | 当前用户目录，例如 `~/.nvm` | 不需要 | 可以按用户安装多个 Node.js 版本，并随时切换 | 更适合老项目固定 Node.js 版本，也方便临时切换到 Node.js 22 做兼容性验证 |
+
+前 3 行看起来复杂，是因为 `nvm` 不是通过 apt 安装到系统目录，而是安装到当前用户的 home 目录：
+
+- `curl ... | bash`：从 nvm 官方 GitHub 地址下载安装脚本并执行，安装 nvm 本身。
+- `export NVM_DIR="$HOME/.nvm"`：告诉当前终端 nvm 在哪里。
+- `[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"`：把 nvm 加载到当前终端里，执行后才能立刻使用 `nvm` 命令。重新登录终端后，安装脚本通常会通过 `.bashrc` 自动加载，后续不一定需要手动执行这两行。
+
+安全习惯：`curl ... | bash` 只对可信来源使用。这里使用的是 nvm 项目的官方 GitHub 安装脚本；如果你想先看脚本内容，也可以先打开 URL 或下载后检查，再执行安装。
+
+是否必须使用 nvm：
+
+- 项目必须有 Node.js 和 npm；否则无法安装依赖、构建 `server`、构建 `client` 和构建 `sdk`。
+- nvm 不是唯一安装方式，但测试环境推荐使用 nvm。原因是它可以固定 Node.js 版本，也方便后续在同一台机器上切换不同版本排查问题。
+- 不建议直接使用 Ubuntu 系统仓库里的最新版 Node.js，因为仓库版本会随系统变化，容易和这个老项目的依赖产生兼容性差异。
+
+为什么 `nvm install`、`nvm alias`、`nvm use` 前面不要加 `sudo`：
+
+- nvm 是“当前用户级”的 Node.js 版本管理工具，默认把 Node.js 安装到当前用户的 `~/.nvm` 目录，不需要写系统目录。
+- 如果加 `sudo`，命令可能会在 root 用户环境里执行，导致 Node.js 被装到 root 的 `~/.nvm`，普通 `fee` 用户反而用不到。
+- 混用 `sudo nvm`、`sudo npm` 还容易造成 `~/.nvm` 目录权限混乱，后续安装依赖或全局包时出现 permission denied。
+- 所以部署用户是 `fee` 时，就在 `fee` 用户下直接执行 `nvm install 12.22.12`、`nvm use 12.22.12`。如果提示 `nvm: command not found`，通常是当前终端还没有加载 nvm，重新执行 `[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"` 或重新登录终端即可，不要改用 `sudo`。
+- 使用 nvm 后，后面的 `npm install -g pm2@5` 也通常不需要 `sudo`，因为全局包会安装到当前用户 nvm 管理的 Node.js 目录下。
+
+关于 Node.js `22.16.0` 和 npm `10.9.2`：
+
+- 你本地 Windows 10 专业版使用 Node.js `22.16.0`、npm `10.9.2` 能跑通，说明这套版本在你的本地场景下可用，但不能直接证明 Ubuntu 测试环境也一定稳定。
+- 差异主要来自依赖安装和 native 包编译。服务端依赖里有 `node-rdkafka@2.5.1`、`sqlite3@4.0.4` 等较老的 native 包，前端也使用 Vue 2、Webpack 4 等老版本工具；这些依赖在 Ubuntu + Node.js 22 + npm 10 下可能出现安装、编译或构建问题。
+- 因此本文默认仍推荐 Node.js `12.22.12`，目标是优先把测试环境稳定跑通。
+- 如果你希望和本地保持一致，也可以在 Ubuntu 上尝试 Node.js `22.16.0`，但要在目标机器上完整验证 `server`、`client`、`sdk` 的依赖安装、构建和启动。若遇到 npm 依赖解析错误，可再评估是否使用 `npm install --legacy-peer-deps`；若遇到 native 包编译错误，建议先退回 Node.js `12.22.12`，不要一边部署一边升级依赖。
+
+如果尝试 Node.js `22.16.0`，命令类似：
+
+```bash
+nvm install 22.16.0
+nvm use 22.16.0
+node -v
+npm -v
+```
+
+确认整套项目都验证通过后，再决定是否执行：
+
+```bash
+nvm alias default 22.16.0
+```
+
 配置 npm 镜像和 node-gyp 使用的 Python：
 
 ```bash

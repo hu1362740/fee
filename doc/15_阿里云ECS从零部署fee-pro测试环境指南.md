@@ -232,14 +232,22 @@ npm -v
 | `node -v` | 查看 Node.js 版本 | 确认当前终端实际使用的 Node.js 版本 |
 | `npm -v` | 查看 npm 版本 | 确认 npm 可用，Node.js 12 通常对应 npm 6.x |
 
-为什么这里不用 `sudo apt install nodejs npm`：
+为什么这里不用 `sudo apt install nodejs npm`，也不把 `sudo apt install nvm` 作为默认写法：
 
 | 方式 | 安装位置 | 是否需要 sudo | 特点 | 对本项目的影响 |
 | --- | --- | --- | --- | --- |
-| `sudo apt install nodejs npm` | 系统目录，例如 `/usr/bin` | 需要 | 由 Ubuntu 软件源决定版本，通常只能方便地维护系统级一个版本 | Ubuntu 新版仓库里的 Node.js 版本可能过新，不一定能直接安装 `12.22.12` |
-| `nvm install 12.22.12` | 当前用户目录，例如 `~/.nvm` | 不需要 | 可以按用户安装多个 Node.js 版本，并随时切换 | 更适合老项目固定 Node.js 版本，也方便临时切换到 Node.js 22 做兼容性验证 |
+| `sudo apt install nodejs npm` | 系统目录，例如 `/usr/bin` | 需要 | 由 Ubuntu 软件源决定 Node.js 和 npm 版本，通常只能方便地维护系统级一个版本 | Ubuntu 新版仓库里的 Node.js 版本可能过新，不一定能直接安装 `12.22.12` |
+| `sudo apt install nvm` | nvm 工具由 apt 安装到系统位置；后续 Node.js 版本通常仍按用户环境管理 | 安装 nvm 工具时需要；后续 `nvm install` 不需要 | 是否可用、版本新旧、shell 加载方式取决于当前 Ubuntu 版本和软件源；很多环境里没有这个包，或行为与官方 nvm 安装脚本不完全一致 | 如果你的服务器确认能安装并正常加载，也可以用；但本文不把它作为默认步骤，避免不同 Ubuntu 镜像表现不一致 |
+| 官方 nvm 安装脚本 + `nvm install 12.22.12` | 当前用户目录，例如 `~/.nvm` | 不需要 sudo 执行 nvm 安装脚本和 Node.js 安装 | nvm 官方推荐流程，可以按用户安装多个 Node.js 版本，并随时切换 | 更适合老项目固定 Node.js 版本，也方便临时切换到 Node.js 22 做兼容性验证 |
 
-前 3 行看起来复杂，是因为 `nvm` 不是通过 apt 安装到系统目录，而是安装到当前用户的 home 目录：
+更具体地说，`apt install nvm` 和这里的官方安装脚本不是完全一回事：
+
+- `apt` 是 Ubuntu 的系统包管理器。`sudo apt install nvm` 如果可用，安装的是 Ubuntu 软件源里打包好的 nvm 工具包；这个包是否存在、版本是多少、如何写入 shell 配置，取决于你的 Ubuntu 版本和镜像源。
+- nvm 官方 README 推荐的是运行官方安装脚本。脚本会把 nvm 克隆到当前用户的 `~/.nvm`，并尝试把加载代码写入当前用户的 `.bashrc`、`.profile` 等 shell 配置文件。
+- 本文选择官方脚本，是为了让 Ubuntu 测试环境、普通云服务器、不同镜像源之间的步骤更一致。它看起来比 `apt install nvm` 长一点，但安装结果更接近 nvm 官方文档，也更容易解释和排查。
+- 如果你执行 `sudo apt install nvm` 能成功，并且重新登录后 `command -v nvm` 能输出 `nvm`，再执行 `nvm install 12.22.12`、`nvm use 12.22.12` 也能正常工作，那也可以继续用这种方式。后续原则不变：在 `fee` 用户下使用 nvm，不要对 `nvm install` 加 `sudo`。
+
+前 3 行看起来复杂，是因为本文采用 nvm 官方脚本安装方式，让 nvm 明确安装并加载到当前用户环境里：
 
 - `curl ... | bash`：从 nvm 官方 GitHub 地址下载安装脚本并执行，安装 nvm 本身。
 - `export NVM_DIR="$HOME/.nvm"`：告诉当前终端 nvm 在哪里。

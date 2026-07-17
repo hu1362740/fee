@@ -521,6 +521,44 @@ cd /opt/fee-pro
 git status --short
 ```
 
+这三条命令建议在部署用户 `fee` 下执行，不要用 `root` 执行。前面已经把 `/opt/fee-pro` 的属主改成了 `fee`，所以这里不需要 `sudo`。
+
+命令的基本格式是：
+
+```bash
+git clone [选项] <仓库地址> <本地目录>
+cd <目录路径>
+git status [选项]
+```
+
+逐条说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `git clone --depth 1 <your-fee-pro-git-url> /opt/fee-pro` | 从 Git 仓库克隆代码到 `/opt/fee-pro` | `<your-fee-pro-git-url>` 替换成你的仓库地址；`/opt/fee-pro` 是本地目标目录；`--depth 1` 表示浅克隆，只拉取最近一次提交历史，能减少下载量和部署时间 |
+| `cd /opt/fee-pro` | 切换当前终端所在目录 | 进入项目目录，后续 `npm install`、`npm run build`、`git status` 等命令默认都在这个目录下执行 |
+| `git status --short` | 查看当前 Git 工作区状态，并用短格式输出 | 用来确认代码是否拉取成功、当前分支是否正常、有没有未提交或未跟踪文件；`--short` 会让输出更简洁 |
+
+是否必要：
+
+- 如果代码已经推到 Git 仓库，并且你希望服务器直接从仓库拉代码，`git clone` 是必要步骤。`--depth 1` 不是必须，但测试环境部署通常推荐使用，因为只需要当前代码，不需要完整历史。
+- `cd /opt/fee-pro` 对后续操作基本必要。后面很多命令都假设当前目录已经是项目根目录。
+- `git status --short` 不是运行项目的必要条件，但强烈建议执行一次，用来确认当前目录确实是 Git 仓库，代码状态也符合预期。
+- 如果你不用 Git，而是通过后面的 `rsync`、`scp` 或压缩包上传代码，可以跳过 `git clone`，但上传完成后仍建议 `cd /opt/fee-pro` 并检查目录内容。
+
+这些命令需要在特定文件夹执行吗：
+
+- 第一行 `git clone --depth 1 <your-fee-pro-git-url> /opt/fee-pro` 使用的是绝对目标路径 `/opt/fee-pro`，所以你当前在 `/home/fee`、`/tmp` 还是其他目录下执行，克隆结果都一样，都会把代码放到 `/opt/fee-pro`。因此这条命令不强制要求先 `cd /home/fee`。
+- 如果本地目录写成相对路径，例如 `git clone <仓库地址> fee-pro`，当前所在目录就有影响：在 `/home/fee` 下执行会克隆到 `/home/fee/fee-pro`，在 `/tmp` 下执行会克隆到 `/tmp/fee-pro`。
+- 第二行 `cd /opt/fee-pro` 的作用就是把当前终端切到项目目录。执行成功后，第三行 `git status --short` 才能直接作用于这个项目仓库。
+- 第三行 `git status --short` 通常需要在 Git 仓库目录内执行，也就是先 `cd /opt/fee-pro`。如果不想切换目录，也可以写成：
+
+```bash
+git -C /opt/fee-pro status --short
+```
+
+注意：`git clone` 的目标目录必须是不存在的目录，或已经存在但为空的目录。本文前面刚执行过 `sudo mkdir -p /opt/fee-pro`，正常情况下这个目录是空的，可以直接克隆。如果 `/opt/fee-pro` 里已经有旧代码或其他文件，`git clone` 会失败，需要先确认里面的内容是否还要保留，再决定清理、备份或改用 `git pull` 更新。
+
 如果代码暂时没有推到 Git 仓库，也可以从本机上传。以下命令在你的本机执行，不是在 ECS 上执行：
 
 ```bash

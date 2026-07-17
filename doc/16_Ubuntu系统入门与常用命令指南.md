@@ -1115,9 +1115,109 @@ id fee
 
 ## 十、软件安装与 apt
 
-Ubuntu 使用 APT 管理软件包。
+Ubuntu 最常用的软件包管理工具是 APT。平时说“用 apt 安装软件”，通常就是指从 Ubuntu 配置好的软件源里下载 `.deb` 软件包，并自动处理依赖、安装、升级和删除。
 
-### 10.1 更新软件索引
+### 10.1 apt 是什么
+
+APT 是 `Advanced Package Tool` 的缩写，是 Debian、Ubuntu 系统上的软件包管理体系。
+
+你可以把它理解成系统级软件管家。它主要负责：
+
+| 作用 | 说明 |
+| --- | --- |
+| 查找软件 | 从已配置的软件源里搜索软件包 |
+| 安装软件 | 下载软件包，并安装到系统标准目录 |
+| 自动处理依赖 | 安装 Nginx 时，如果它依赖其他库，APT 会一起安装 |
+| 升级软件 | 根据软件源里的新版本升级已安装软件 |
+| 删除软件 | 删除程序文件，必要时也可以删除配置文件 |
+| 记录软件状态 | 知道哪些包是手动安装，哪些包是依赖安装 |
+
+APT 管理的是系统级软件，例如：
+
+```text
+nginx
+mysql-server
+redis-server
+git
+curl
+vim
+nodejs
+python3
+```
+
+它不只是一个命令，而是一套工具。常见相关命令有：
+
+| 命令 | 作用 |
+| --- | --- |
+| `apt` | 面向日常交互使用的高级命令，初学者优先用它 |
+| `apt-get` | 更老、更稳定的命令，脚本和自动化部署里仍常见 |
+| `apt-cache` | 查询软件包缓存信息，很多功能现在可用 `apt search/show` 替代 |
+| `dpkg` | 更底层的 `.deb` 包管理工具，只管本地包，不会像 apt 那样自动从软件源解决依赖 |
+
+简单理解：
+
+```text
+apt      更像常用入口
+apt-get  更适合脚本
+dpkg     更底层，处理具体 .deb 包
+```
+
+### 10.2 apt 命令格式与常用参数
+
+基本格式：
+
+```bash
+apt [选项] 子命令 [软件包名]
+```
+
+日常更常见的格式：
+
+```bash
+sudo apt 子命令 软件包名
+```
+
+例如：
+
+```bash
+sudo apt install nginx
+```
+
+拆开看：
+
+```text
+sudo     以管理员权限执行
+apt      软件包管理命令
+install  子命令，表示安装
+nginx    软件包名
+```
+
+常用子命令：
+
+| 子命令 | 示例 | 作用 |
+| --- | --- | --- |
+| `update` | `sudo apt update` | 更新本地软件包索引 |
+| `upgrade` | `sudo apt upgrade` | 升级已安装软件 |
+| `install` | `sudo apt install nginx` | 安装软件 |
+| `remove` | `sudo apt remove nginx` | 删除程序，保留配置 |
+| `purge` | `sudo apt purge nginx` | 删除程序和系统配置 |
+| `autoremove` | `sudo apt autoremove` | 清理不再需要的依赖 |
+| `search` | `apt search nginx` | 搜索软件包 |
+| `show` | `apt show nginx` | 查看软件包详情 |
+| `list --installed` | `apt list --installed` | 查看已安装软件包 |
+| `policy` | `apt policy nginx` | 查看安装版本、候选版本和来源 |
+
+常用选项：
+
+| 选项 | 示例 | 说明 |
+| --- | --- | --- |
+| `-y` | `sudo apt install -y nginx` | 自动回答 yes，适合脚本，手工操作时要谨慎 |
+| `--reinstall` | `sudo apt install --reinstall nginx` | 重新安装某个软件包 |
+| `--no-install-recommends` | `sudo apt install --no-install-recommends package` | 不安装推荐依赖，适合精简环境 |
+| `--only-upgrade` | `sudo apt install --only-upgrade nginx` | 只升级已安装的软件，不新装 |
+
+新手建议：手动操作时可以先不加 `-y`，认真看 APT 提示“将安装、升级、删除哪些包”，确认后再输入 `Y`。
+
+### 10.3 更新软件索引
 
 ```bash
 sudo apt update
@@ -1125,7 +1225,18 @@ sudo apt update
 
 `apt update` 只更新“可安装软件版本清单”，不升级已经安装的软件。
 
-### 10.2 升级软件
+可以把它理解成：刷新本地软件目录，让系统知道软件源里现在有哪些包、有哪些版本。
+
+常见场景：
+
+```text
+刚买的新服务器
+刚添加新的软件源
+准备安装软件之前
+准备升级软件之前
+```
+
+### 10.4 升级软件
 
 ```bash
 sudo apt upgrade
@@ -1139,14 +1250,45 @@ sudo apt upgrade -y
 
 生产服务器升级前应先看变更和备份；内核、数据库、Nginx 等升级可能需要重启或兼容性验证。
 
-### 10.3 安装软件
+还有一个更激进的升级命令：
+
+```bash
+sudo apt full-upgrade
+```
+
+它可能为了完成升级而删除某些旧包。服务器上不要随手执行，先看清楚提示。
+
+### 10.5 安装软件
 
 ```bash
 sudo apt install -y nginx
 sudo apt install -y vim nano htop ripgrep tree
 ```
 
-### 10.4 查询软件
+一次可以安装多个软件包：
+
+```bash
+sudo apt install git curl unzip
+```
+
+安装前可以先查：
+
+```bash
+apt search nginx
+apt show nginx
+```
+
+如果安装失败，常见原因包括：
+
+```text
+没有先执行 apt update
+软件包名写错
+软件源没有这个包
+网络无法访问软件源
+系统版本太旧或太新，软件源没有对应版本
+```
+
+### 10.6 查询软件
 
 ```bash
 apt search nginx
@@ -1161,7 +1303,26 @@ dpkg -l nginx
 dpkg -S /usr/sbin/nginx
 ```
 
-### 10.5 删除软件
+查看某个软件包安装了哪些文件：
+
+```bash
+dpkg -L nginx
+```
+
+查看某个命令实际路径：
+
+```bash
+which nginx
+whereis nginx
+```
+
+查看软件包版本和来源：
+
+```bash
+apt policy nginx
+```
+
+### 10.7 删除软件
 
 删除程序但保留配置：
 
@@ -1182,6 +1343,285 @@ sudo apt autoremove
 ```
 
 执行 `purge`、`autoremove` 前先阅读 APT 将要删除的软件清单。
+
+### 10.8 apt 在什么场景中使用
+
+适合使用 APT 的场景：
+
+| 场景 | 示例 |
+| --- | --- |
+| 安装系统工具 | `sudo apt install curl git vim` |
+| 安装服务器软件 | `sudo apt install nginx redis-server mysql-server` |
+| 安装排查工具 | `sudo apt install htop ripgrep dnsutils` |
+| 安装编译依赖 | `sudo apt install build-essential` |
+| 升级系统软件 | `sudo apt update && sudo apt upgrade` |
+| 删除不需要的软件 | `sudo apt remove package` |
+
+不太适合直接用 APT 解决的场景：
+
+| 场景 | 更常见方式 |
+| --- | --- |
+| 安装 Node.js 项目的依赖 | 用 `npm install`、`pnpm install` 或 `yarn install` |
+| 安装 Python 项目的依赖 | 用 `pip`、`venv`、`poetry` 等 |
+| 部署自己写的业务项目 | 通常放在 `/opt`、`/srv` 或 `/home/用户/app` |
+| 需要某软件的官方最新版 | 可能使用官方仓库、PPA、二进制包、Docker 或源码安装 |
+
+### 10.9 Ubuntu 只有 APT 能管理软件包吗
+
+不是。APT 是 Ubuntu 最核心、最常用的系统软件包管理方式，但不是唯一方式。
+
+常见软件安装方式：
+
+| 方式 | 说明 |
+| --- | --- |
+| APT / `.deb` | Ubuntu 最常用的系统软件包方式 |
+| Snap | Ubuntu 默认支持的另一套包管理方式，命令是 `snap` |
+| Flatpak | 桌面 Linux 常见，服务器上较少用 |
+| 手动下载二进制文件 | 例如下载一个 `tar.gz` 解压到 `/opt` |
+| 源码编译安装 | 常见于需要特殊版本或特殊编译参数的软件 |
+| Docker 镜像 | 把软件和运行环境放进容器 |
+| 语言生态包管理器 | 例如 Node.js 的 `npm`，Python 的 `pip` |
+
+服务器上优先级通常是：
+
+```text
+能用官方 APT 源稳定安装，就优先用 APT。
+APT 版本太旧，再考虑官方仓库、PPA、Docker 或手动安装。
+业务项目依赖用对应语言自己的包管理器。
+```
+
+### 10.10 apt 是否相当于 Node.js 中的 npm
+
+可以类比，但不能完全等同。
+
+相同点：
+
+| 相同点 | 说明 |
+| --- | --- |
+| 都能安装软件包 | `apt install nginx`，`npm install express` |
+| 都会处理依赖 | 安装一个包时，会安装它依赖的其他包 |
+| 都有远程仓库概念 | APT 有软件源，npm 有 npm registry |
+| 都能查询版本和包信息 | `apt show`，`npm view` |
+
+不同点更重要：
+
+| 对比 | APT | npm |
+| --- | --- | --- |
+| 管理范围 | 操作系统级软件 | Node.js 项目或 Node.js 全局工具 |
+| 安装位置 | 系统标准目录，如 `/usr/bin`、`/etc`、`/usr/lib` | 项目 `node_modules` 或 npm 全局目录 |
+| 权限要求 | 安装系统包通常需要 root/sudo | 项目依赖通常不需要 sudo |
+| 包格式 | `.deb` | npm package |
+| 管理方 | Ubuntu/Debian 官方仓库、镜像源、第三方软件源 | npm registry |
+| 典型软件 | Nginx、Git、Redis、系统库 | Express、Vue、Webpack、TypeScript |
+
+所以可以这样理解：
+
+```text
+apt 是系统层的软件包管理器。
+npm 是 Node.js 生态的软件包管理器。
+```
+
+安装 Nginx、Git、Redis 用 APT 比较自然：
+
+```bash
+sudo apt install nginx git redis-server
+```
+
+安装项目依赖用 npm：
+
+```bash
+npm install
+```
+
+不要在 Node.js 项目目录里习惯性使用：
+
+```bash
+sudo npm install
+```
+
+否则可能产生 root 所有的 `node_modules`，后续普通部署用户会遇到权限问题。
+
+### 10.11 apt 是不是一个“软件市场”
+
+可以把 APT 软件源粗略理解成“软件仓库”或“软件市场”，但它不是一个任何人都能随便上传的软件平台。
+
+APT 从哪里下载软件，取决于系统配置的软件源。常见配置位置：
+
+```text
+/etc/apt/sources.list
+/etc/apt/sources.list.d/
+```
+
+Ubuntu 官方软件源里的包通常由 Ubuntu/Debian 维护者打包、测试和发布。第三方软件也可以提供自己的 APT 源，例如某些数据库、浏览器、云厂商工具。
+
+大致流程是：
+
+```text
+软件作者发布源码或二进制
+维护者把它打成 .deb 包
+软件源发布这个包及索引信息
+用户执行 apt update 获取索引
+用户执行 apt install 下载并安装
+```
+
+所以它不是“有人上传到 apt 平台，用户才能下载”这么简单，更准确说是：
+
+```text
+用户只能从自己服务器配置的软件源中下载软件包。
+软件包需要被官方仓库或第三方仓库维护和发布。
+```
+
+添加第三方软件源要谨慎，因为你相当于信任它可以向系统安装软件。生产服务器不要随便复制来历不明的：
+
+```bash
+curl ... | sudo bash
+```
+
+这类命令风险很高，执行前一定要确认来源可信。
+
+### 10.12 apt 安装软件需要 root 或 sudo 吗
+
+查询类命令通常不需要 sudo：
+
+```bash
+apt search nginx
+apt show nginx
+apt list --installed
+apt policy nginx
+```
+
+安装、升级、删除软件通常需要 root 权限：
+
+```bash
+sudo apt install nginx
+sudo apt upgrade
+sudo apt remove nginx
+```
+
+原因是 APT 会修改系统目录，例如：
+
+```text
+/usr
+/etc
+/var
+/lib
+```
+
+这些目录普通用户默认不能写。
+
+如果你当前就是 root 用户，可以直接执行：
+
+```bash
+apt install nginx
+```
+
+如果你是普通用户，并且属于 `sudo` 组，使用：
+
+```bash
+sudo apt install nginx
+```
+
+如果普通用户不在 `sudo` 组，就不能直接安装系统软件，需要管理员授权。
+
+有一个例外：普通用户可以只下载 `.deb` 包到当前目录：
+
+```bash
+apt download nginx
+```
+
+但真正安装到系统里，仍然需要 root/sudo。
+
+### 10.13 apt 安装的软件在哪里
+
+APT 安装的软件通常不会集中放在一个目录，而是按照 Linux 文件系统规范分散到系统标准位置。
+
+常见位置：
+
+| 路径 | 常见内容 |
+| --- | --- |
+| `/usr/bin` | 普通用户可执行命令，例如 `git`、`curl` |
+| `/usr/sbin` | 系统管理命令，例如 `nginx` |
+| `/usr/lib` | 程序库文件 |
+| `/lib` | 系统基础库 |
+| `/etc` | 配置文件，例如 Nginx 配置 |
+| `/var/lib` | 服务运行数据，例如数据库、缓存状态 |
+| `/var/log` | 日志文件 |
+| `/lib/systemd/system` | systemd 服务定义文件 |
+| `/usr/share/doc` | 文档、示例、版权说明 |
+
+以 Nginx 为例，可能涉及：
+
+```text
+/usr/sbin/nginx
+/etc/nginx/
+/var/log/nginx/
+/var/www/html/
+/lib/systemd/system/nginx.service
+```
+
+查看某个命令在哪里：
+
+```bash
+which nginx
+whereis nginx
+```
+
+查看某个软件包安装了哪些文件：
+
+```bash
+dpkg -L nginx
+```
+
+查看某个文件属于哪个包：
+
+```bash
+dpkg -S /usr/sbin/nginx
+```
+
+### 10.14 apt 可以指定安装路径吗
+
+通常不可以，也不建议。
+
+APT 安装的是 `.deb` 软件包，包里面已经规定了文件应该放到哪里。APT 的设计目标是把系统软件安装到标准位置，让系统服务、配置文件、日志、依赖关系都能被统一管理。
+
+它不像某些源码安装命令那样经常可以写：
+
+```bash
+./configure --prefix=/opt/somewhere
+```
+
+也不像 npm 项目依赖那样默认安装到当前项目的：
+
+```text
+node_modules/
+```
+
+如果你确实需要把某个软件安装到自定义目录，通常会选择：
+
+| 方式 | 适用场景 |
+| --- | --- |
+| 下载官方二进制包解压到 `/opt` | 软件官方提供独立压缩包 |
+| 源码编译并指定 `--prefix` | 需要特殊编译版本 |
+| Docker | 希望隔离运行环境 |
+| 使用语言版本管理工具 | 例如 `nvm` 管理 Node.js |
+
+一般服务器管理中，不建议改 APT 软件的安装路径，原因是：
+
+1. 系统服务文件通常假设程序在标准路径。
+2. 配置文件和日志路径也有默认约定。
+3. APT 能自动升级、删除、检查文件归属。
+4. 改路径会增加排查难度，别人接手服务器时也不容易判断。
+
+更推荐的做法：
+
+| 类型 | 推荐位置 |
+| --- | --- |
+| 系统软件 | 用 APT 安装到默认位置 |
+| 自己部署的业务项目 | `/opt/项目名`、`/srv/项目名` 或 `/home/部署用户/项目名` |
+| 项目日志 | `/var/log/项目名` 或项目自己的 `logs` 目录 |
+| 项目配置 | 简单项目可放项目目录；系统级服务配置可放 `/etc/项目名` |
+
+也就是说：Nginx、Git、Redis 这类系统软件交给 APT；你自己的项目代码单独放在 `/opt`、`/srv` 或部署用户家目录下，这样最清晰。
 
 ## 十一、进程与后台任务
 

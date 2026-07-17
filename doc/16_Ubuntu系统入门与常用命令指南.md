@@ -661,7 +661,7 @@ sudo apt install -y dos2unix
 dos2unix script.sh
 ```
 
-## 八、用户、root 和 sudo
+## 八、用户、用户组、root 和 sudo
 
 ### 8.1 查看当前身份
 
@@ -671,6 +671,14 @@ id
 groups
 ```
 
+含义：
+
+| 命令 | 作用 |
+| --- | --- |
+| `whoami` | 查看当前用户名 |
+| `id` | 查看当前用户的 UID、主用户组、附加用户组 |
+| `groups` | 查看当前用户属于哪些用户组 |
+
 查看当前有哪些用户正在登录：
 
 ```bash
@@ -678,30 +686,308 @@ who
 w
 ```
 
-### 8.2 root 与 sudo
+### 8.2 sudo 是什么
 
-`root` 是最高权限用户，可以修改或删除任何文件。日常建议用普通用户，只在需要时给单条命令加 `sudo`：
+`sudo` 是 `superuser do` 的缩写，可以理解为“以管理员权限执行后面的命令”。
+
+普通用户默认不能随意修改系统文件、安装软件、管理系统服务。`sudo` 的作用就是让被授权的普通用户临时获得更高权限，只执行这一条命令。
+
+基本结构：
 
 ```bash
+sudo 命令 [选项] [参数]
+```
+
+例子：
+
+```bash
+sudo apt update
+sudo apt install -y nginx
 sudo systemctl restart nginx
 sudo nano /etc/nginx/conf.d/fee-pro.conf
 ```
 
-确认某条命令是否真的需要管理员权限，不要习惯性给所有命令加 `sudo`。例如不要用 `sudo npm install` 安装项目依赖，否则 `node_modules` 可能变成 root 所有，后续普通用户无法维护。
+这些命令分别表示：
 
-进入 root Shell：
+| 命令 | 作用 |
+| --- | --- |
+| `sudo apt update` | 以管理员权限更新软件包索引 |
+| `sudo apt install -y nginx` | 以管理员权限安装 Nginx |
+| `sudo systemctl restart nginx` | 以管理员权限重启 Nginx 服务 |
+| `sudo nano /etc/nginx/conf.d/fee-pro.conf` | 以管理员权限编辑 Nginx 配置 |
+
+`sudo` 通常会要求输入当前用户自己的密码。输入密码时屏幕不会显示 `*`，这是正常现象，输入完成后按回车即可。
+
+如果当前用户没有 sudo 权限，可能看到：
+
+```text
+user is not in the sudoers file
+```
+
+或：
+
+```text
+Permission denied
+```
+
+这表示当前用户没有被授权执行管理员命令，需要 root 或已有 sudo 权限的用户把它加入 `sudo` 组。
+
+### 8.3 sudo 常见用法
+
+执行管理员命令：
+
+```bash
+sudo systemctl status nginx
+```
+
+以另一个用户身份执行命令：
+
+```bash
+sudo -u fee whoami
+```
+
+进入 root 登录环境：
 
 ```bash
 sudo -i
 ```
 
-用完立刻退出：
+查看当前用户能执行哪些 sudo 命令：
 
 ```bash
-exit
+sudo -l
 ```
 
-### 8.3 创建和管理用户
+清除当前终端缓存的 sudo 认证：
+
+```bash
+sudo -k
+```
+
+之后再次执行 `sudo` 时，会重新要求输入密码。
+
+编辑系统文件也可以使用：
+
+```bash
+sudoedit /etc/nginx/conf.d/fee-pro.conf
+```
+
+`sudoedit` 会用更安全的方式编辑需要管理员权限的文件。如果你还不熟悉它，先用 `sudo nano 文件路径` 也可以。
+
+需要注意：`sudo` 只提升后面那条命令的权限，不一定提升整行命令中的所有操作。例如：
+
+```bash
+sudo echo 'text' > /etc/example.conf
+```
+
+这条命令经常失败，因为 `echo` 是 sudo 执行的，但 `>` 重定向是当前普通 Shell 执行的。更可靠的写法是：
+
+```bash
+echo 'text' | sudo tee /etc/example.conf
+```
+
+### 8.4 什么场景需要使用 sudo
+
+一般需要 `sudo` 的场景：
+
+| 场景 | 示例 |
+| --- | --- |
+| 安装、升级、删除系统软件 | `sudo apt install nginx` |
+| 修改 `/etc` 下的系统配置 | `sudo nano /etc/nginx/nginx.conf` |
+| 启动、停止、重启系统服务 | `sudo systemctl restart nginx` |
+| 修改系统目录文件 | `sudo cp app.conf /etc/nginx/conf.d/` |
+| 修改文件所有者 | `sudo chown -R fee:fee /opt/fee-pro` |
+| 查看部分系统日志 | `sudo journalctl -u nginx -n 100` |
+| 查看部分进程和端口详情 | `sudo ss -lntp` |
+| 管理防火墙 | `sudo ufw allow 80/tcp` |
+
+通常不需要 `sudo` 的场景：
+
+| 场景 | 示例 |
+| --- | --- |
+| 查看自己目录下的文件 | `ls -lah` |
+| 编辑自己拥有的项目文件 | `nano app.js` |
+| 在自己拥有的项目目录里拉代码 | `git pull` |
+| 在自己拥有的项目目录里安装依赖 | `npm install` |
+| 查看普通命令帮助 | `ls --help` |
+
+不要习惯性给所有命令加 `sudo`。例如不要在项目目录里随手执行：
+
+```bash
+sudo npm install
+```
+
+这样可能导致 `node_modules` 或其他生成文件变成 root 所有，后续普通用户无法删除或修改，部署时会出现权限问题。
+
+### 8.5 Ubuntu 有几个用户组和权限组
+
+Ubuntu 里没有固定“只有几个用户组”的说法。用户组是可以创建、删除和扩展的，系统安装的软件不同，用户组数量也会不同。
+
+可以查看系统已有用户组：
+
+```bash
+getent group
+```
+
+只看用户组名称：
+
+```bash
+cut -d: -f1 /etc/group
+```
+
+查看某个用户属于哪些组：
+
+```bash
+id fee
+groups fee
+```
+
+Linux 权限里要区分两个概念：
+
+| 概念 | 说明 |
+| --- | --- |
+| 用户组 group | 系统里的用户集合，例如 `sudo`、`adm`、`www-data` |
+| 权限类别 | 每个文件都有三类权限：所有者、所属组、其他用户 |
+
+执行：
+
+```bash
+ls -l app.js
+```
+
+可能看到：
+
+```text
+-rw-r--r-- 1 fee fee 1024 Jul 16 12:00 app.js
+```
+
+这里第一个 `fee` 是文件所有者，第二个 `fee` 是文件所属组。前面的权限 `rw-r--r--` 分成三段：
+
+```text
+rw-  所有者权限
+r--  所属组权限
+r--  其他用户权限
+```
+
+所以，“用户组”不是固定几个；但文件权限判断通常固定分为三类：
+
+```text
+所有者 owner
+所属组 group
+其他用户 others
+```
+
+每一类又可以有三种权限：
+
+```text
+r  read，读
+w  write，写
+x  execute，执行
+```
+
+### 8.6 Ubuntu 常见用户组
+
+不同机器上的用户组会有差异，但服务器上常见的有：
+
+| 用户组 | 常见作用 |
+| --- | --- |
+| `sudo` | 允许成员使用 `sudo` 执行管理员命令 |
+| `adm` | 允许成员读取部分系统日志，例如 `/var/log` 下的日志 |
+| `www-data` | Nginx、Apache 等 Web 服务常用用户/用户组 |
+| `systemd-journal` | 允许读取 systemd journal 日志 |
+| `docker` | 允许不加 sudo 执行 Docker 命令，权限很高 |
+| `users` | 普通用户组，部分系统会使用 |
+| `root` | root 用户相关组 |
+
+特别注意 `docker` 组。加入 `docker` 组后，用户通常可以通过 Docker 获得接近 root 的能力，不要随便把不可信用户加入这个组。
+
+一个用户通常有一个主用户组，也可以有多个附加用户组。
+
+创建用户 `fee` 时，Ubuntu 通常会创建一个同名主用户组：
+
+```text
+用户：fee
+主组：fee
+```
+
+把 `fee` 加入 sudo 附加组：
+
+```bash
+sudo usermod -aG sudo fee
+```
+
+这里的参数含义：
+
+| 参数 | 含义 |
+| --- | --- |
+| `-a` | append，追加到附加组 |
+| `-G sudo` | 指定附加组为 `sudo` |
+| `fee` | 要修改的用户名 |
+
+`-a` 很重要，不要漏掉。只写 `usermod -G sudo fee` 可能覆盖用户原有的附加组。
+
+新增用户组权限通常需要退出 SSH 后重新登录才会完整生效。可以用下面命令确认：
+
+```bash
+id fee
+groups fee
+```
+
+### 8.7 root 用户与普通用户是否都需要 sudo
+
+`root` 是最高权限用户，可以修改或删除几乎任何文件，也可以管理系统服务、用户、网络和软件包。
+
+普通用户权限较低，默认不能修改系统关键目录，例如：
+
+```text
+/etc
+/usr
+/var/log
+/root
+/lib
+/bin
+```
+
+普通用户需要执行管理员操作时，才使用 `sudo`：
+
+```bash
+sudo apt update
+sudo systemctl restart nginx
+sudo chown -R fee:fee /opt/fee-pro
+```
+
+root 用户通常不需要 `sudo`，因为 root 已经拥有最高权限。你在 root 终端里执行：
+
+```bash
+apt update
+systemctl restart nginx
+```
+
+本身就是管理员权限。
+
+不过 root 有时也会使用 `sudo -u`，不是为了提升权限，而是为了“降级”为某个普通用户去执行命令：
+
+```bash
+sudo -u fee whoami
+sudo -u www-data php -v
+```
+
+这类用法常见于排查某个服务用户能否访问文件、能否执行程序。
+
+日常建议：
+
+| 用户类型 | 建议 |
+| --- | --- |
+| 普通用户 | 日常登录和维护项目，需要管理员权限时给单条命令加 `sudo` |
+| root 用户 | 少用作日常用户，适合初始化服务器、修复权限、紧急维护 |
+| 服务用户 | 只运行服务，不用于日常登录，例如 `www-data`、`mysql` |
+
+长期直接用 root 操作项目容易造成两个问题：
+
+1. 误删、误改系统文件的风险更大。
+2. 项目文件可能变成 root 所有，普通部署用户无法继续维护。
+
+### 8.8 创建和管理用户
 
 创建用户：
 
@@ -715,10 +1001,15 @@ sudo adduser fee
 sudo usermod -aG sudo fee
 ```
 
-修改密码：
+修改当前用户自己的密码：
 
 ```bash
 passwd
+```
+
+由管理员修改 `fee` 用户的密码：
+
+```bash
 sudo passwd fee
 ```
 
@@ -726,6 +1017,18 @@ sudo passwd fee
 
 ```bash
 su - fee
+```
+
+进入 root Shell：
+
+```bash
+sudo -i
+```
+
+用完立刻退出：
+
+```bash
+exit
 ```
 
 ## 九、文件所有者与权限

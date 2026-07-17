@@ -31,12 +31,12 @@ Task:Manager
 - 后端运行环境：`NODE_ENV=testing`
 - Node.js：`12.22.12`
 - 进程管理：`PM2 5.x`
-- 数据库：推荐 MariaDB，作为 MySQL 协议兼容数据库
+- 数据库：推荐 MariaDB，作为 MySQL 协议兼容数据库；如需使用 MySQL 8.0.12，见本文 `5.3`
 - Redis：仅监听本机，不设置密码
 - 对公网只开放 `22`、`80`，可选 `443`
 - 不对公网开放 `3000`、`3306`、`6379`
 
-> 为什么测试环境推荐 MariaDB：当前项目使用较老的 `mysql@2.15.0` 驱动。Ubuntu 新版仓库里的 MySQL 8.x 默认认证方式可能和旧驱动不兼容，容易出现 `ER_NOT_SUPPORTED_AUTH_MODE`。MariaDB 对这个老项目更省心。若公司必须使用 MySQL 8.x，见本文 `18.2`。
+> 为什么测试环境推荐 MariaDB：当前项目使用较老的 `mysql@2.15.0` 驱动。Ubuntu 新版仓库里的 MySQL 8.x 默认认证方式可能和旧驱动不兼容，容易出现 `ER_NOT_SUPPORTED_AUTH_MODE`。MariaDB 对这个老项目更省心。若公司必须使用 MySQL 8.x，或希望和本地 Windows 的 MySQL 8.0.12 对齐，见本文 `5.3` 和 `18.2`。
 
 ## 二、阿里云控制台准备
 
@@ -230,6 +230,63 @@ mysql -h 127.0.0.1 -u fee_test -p platform_test -e "SELECT VERSION();"
 ```
 
 输入你刚才设置的密码，能看到版本号即成功。
+
+### 5.3 可选：使用 MySQL 8.0.12
+
+如果你的本地 Windows 环境使用 MySQL 8.0.12 且已经跑通，Ubuntu 测试环境也可以使用 MySQL 8.0.12。需要注意的是，关键差异不在操作系统，而在连接账号使用的认证插件。
+
+MySQL 8.0.12 默认可能给新账号使用 `caching_sha2_password`，而本项目依赖的旧 `mysql@2.15.0` 驱动更适合连接 `mysql_native_password` 账号。Windows 能正常连接，通常是因为安装 MySQL 时选择了兼容 MySQL 5.x 的旧认证方式，或连接账号后来被改成了 `mysql_native_password`。
+
+如果你决定使用 MySQL 8.0.12：
+
+- 不要同时让 MariaDB 和 MySQL 监听同一个 `3306` 端口，测试环境二选一即可。
+- Ubuntu 默认仓库未必能直接安装指定的 MySQL `8.0.12`，如果公司要求固定这个版本，建议使用公司统一安装包或 MySQL 官方 APT 仓库并锁定版本。
+- `server/src/configs/mysql.js` 里的 `testing.host` 是 `127.0.0.1`，所以至少要创建 `'fee_test'@'127.0.0.1'`；为了方便命令行本机登录，也可以同时创建 `'fee_test'@'localhost'`。
+
+MySQL 服务启动命令通常是：
+
+```bash
+sudo systemctl enable --now mysql
+sudo systemctl status mysql
+```
+
+创建测试库和兼容旧驱动的账号：
+
+```bash
+sudo mysql <<'SQL'
+CREATE DATABASE IF NOT EXISTS platform_test
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS 'fee_test'@'127.0.0.1'
+  IDENTIFIED BY 'FeeTest_ChangeMe_2026!';
+
+CREATE USER IF NOT EXISTS 'fee_test'@'localhost'
+  IDENTIFIED BY 'FeeTest_ChangeMe_2026!';
+
+ALTER USER 'fee_test'@'127.0.0.1'
+  IDENTIFIED WITH mysql_native_password BY 'FeeTest_ChangeMe_2026!';
+
+ALTER USER 'fee_test'@'localhost'
+  IDENTIFIED WITH mysql_native_password BY 'FeeTest_ChangeMe_2026!';
+
+GRANT ALL PRIVILEGES ON platform_test.* TO 'fee_test'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON platform_test.* TO 'fee_test'@'localhost';
+FLUSH PRIVILEGES;
+
+SELECT user, host, plugin
+FROM mysql.user
+WHERE user = 'fee_test';
+SQL
+```
+
+确认查询结果里 `fee_test` 对应的 `plugin` 是 `mysql_native_password`。然后验证连接：
+
+```bash
+mysql -h 127.0.0.1 -u fee_test -p platform_test -e "SELECT VERSION();"
+```
+
+能看到 `8.0.12` 或你的目标 MySQL 版本号，说明数据库侧已经准备好。后续 `8.1` 的项目配置仍按同样的 `host`、`user`、`password`、`database` 填写。
 
 ## 六、配置 Redis
 
@@ -948,20 +1005,31 @@ pm2 restart fee-task-manager --update-env
 
 ### 18.2 `ER_NOT_SUPPORTED_AUTH_MODE`
 
-原因：使用 MySQL 8.x 时，旧 `mysql` npm 驱动可能不支持默认认证插件。
+原因：使用 MySQL 8.x 时，旧 `mysql` npm 驱动可能不支持默认认证插件。MySQL 8.0 中默认认证插件从 `mysql_native_password` 调整为 `caching_sha2_password`，而本项目的 `mysql@2.15.0` 更适合使用 `mysql_native_password` 账号。
 
 推荐处理：测试环境使用 MariaDB。
 
-如果必须使用 MySQL 8.x，可尝试创建兼容旧驱动的用户：
+如果必须使用 MySQL 8.x，先确认连接账号使用的插件：
 
 ```sql
-CREATE USER 'fee_test'@'127.0.0.1'
+SELECT user, host, plugin
+FROM mysql.user
+WHERE user = 'fee_test';
+```
+
+如果 `plugin` 不是 `mysql_native_password`，可把测试账号改成兼容旧驱动的认证方式：
+
+```sql
+ALTER USER 'fee_test'@'127.0.0.1'
   IDENTIFIED WITH mysql_native_password BY 'FeeTest_ChangeMe_2026!';
-GRANT ALL PRIVILEGES ON platform_test.* TO 'fee_test'@'127.0.0.1';
+
+ALTER USER 'fee_test'@'localhost'
+  IDENTIFIED WITH mysql_native_password BY 'FeeTest_ChangeMe_2026!';
+
 FLUSH PRIVILEGES;
 ```
 
-如果 MySQL 版本禁用了或移除了 `mysql_native_password`，需要启用对应插件，或升级项目数据库驱动。
+如果只创建了 `'fee_test'@'localhost'`，但项目配置里使用 `host: '127.0.0.1'`，也可能仍然连不上；请同时创建或授权 `'fee_test'@'127.0.0.1'`。如果 MySQL 版本禁用了或移除了 `mysql_native_password`，需要启用对应插件，或升级项目数据库驱动。
 
 ### 18.3 Redis 报 `NOAUTH Authentication required`
 

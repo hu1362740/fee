@@ -362,13 +362,13 @@ mysql -h 127.0.0.1 -u fee_test -p platform_test -e "SELECT VERSION();"
 
 输入你刚才设置的密码，能看到版本号即成功。
 
-### 5.3 可选：使用 MySQL 8.0.12
+### 5.3 可选：使用 MySQL 8.x（含 8.0.12 / 8.4.10）
 
-如果你的本地 Windows 环境使用 MySQL 8.0.12 且已经跑通，Ubuntu 测试环境也可以使用 MySQL 8.0.12。需要注意的是，关键差异不在操作系统，而在连接账号使用的认证插件。
+如果你的本地 Windows 环境使用 MySQL 8.0.12 且已经跑通，Ubuntu 测试环境也可以使用 MySQL 8.x。需要注意的是，关键差异不在操作系统，而在连接账号使用的认证插件。
 
-MySQL 8.0.12 默认可能给新账号使用 `caching_sha2_password`，而本项目依赖的旧 `mysql@2.15.0` 驱动更适合连接 `mysql_native_password` 账号。Windows 能正常连接，通常是因为安装 MySQL 时选择了兼容 MySQL 5.x 的旧认证方式，或连接账号后来被改成了 `mysql_native_password`。
+MySQL 8.x 默认可能给新账号使用 `caching_sha2_password`，而本项目依赖的旧 `mysql@2.15.0` 驱动更适合连接 `mysql_native_password` 账号。Windows 能正常连接，通常是因为安装 MySQL 时选择了兼容 MySQL 5.x 的旧认证方式，或连接账号后来被改成了 `mysql_native_password`。
 
-如果你决定使用 MySQL 8.0.12：
+如果你决定使用 MySQL 8.x：
 
 - 不要同时让 MariaDB 和 MySQL 监听同一个 `3306` 端口，测试环境二选一即可。
 - Ubuntu 默认仓库未必能直接安装指定的 MySQL `8.0.12`，如果公司要求固定这个版本，建议使用公司统一安装包或 MySQL 官方 APT 仓库并锁定版本。
@@ -380,6 +380,61 @@ MySQL 服务启动命令通常是：
 sudo systemctl enable --now mysql
 sudo systemctl status mysql
 ```
+
+这两条命令都在 Linux Shell 里执行，也就是提示符类似 `fee@my-server:/opt/fee-pro/server$` 时执行，不是在 `mysql>` 里执行。
+
+- `sudo`：使用管理员权限执行命令。
+- `systemctl`：管理 Ubuntu 上的系统服务。
+- `enable --now mysql`：把 `mysql` 服务设置为开机自启动，并且立刻启动；大致等价于先执行 `sudo systemctl enable mysql`，再执行 `sudo systemctl start mysql`。
+- `status mysql`：查看 `mysql` 服务当前状态。看到 `Active: active (running)` 表示正在运行；如果进入状态查看页面后想返回命令行，按 `q` 退出。
+
+如果已经进入 MySQL 交互界面，提示符会变成 `mysql>`。此时只能输入 SQL，不要再输入 `sudo mysql -e "..."` 这种 Shell 命令。例如：
+
+```sql
+SELECT VERSION();
+```
+
+如果想退出 MySQL 交互界面，回到 Linux Shell，执行：
+
+```sql
+exit;
+```
+
+确认 MySQL 版本和认证插件状态：
+
+```bash
+sudo mysql -e "SELECT VERSION();"
+sudo mysql -e "SELECT PLUGIN_NAME, PLUGIN_STATUS FROM INFORMATION_SCHEMA.PLUGINS WHERE PLUGIN_NAME IN ('mysql_native_password', 'caching_sha2_password');"
+```
+
+如果使用 MySQL 8.4.10，可能看到：
+
+```text
+caching_sha2_password | ACTIVE
+mysql_native_password | DISABLED
+```
+
+这表示 MySQL 自带的新认证插件已启用，但兼容旧驱动的 `mysql_native_password` 被禁用。此时如果继续执行 `IDENTIFIED WITH mysql_native_password`，可能报 `Plugin 'mysql_native_password' is not loaded`。需要先编辑 MySQL 配置：
+
+```bash
+sudo vim /etc/mysql/mysql.conf.d/mysqld.cnf
+```
+
+在 `[mysqld]` 下面增加一行：
+
+```ini
+mysql_native_password=ON
+```
+
+保存退出后重启 MySQL：
+
+```bash
+sudo systemctl restart mysql
+```
+
+再次执行插件状态查询，确认 `mysql_native_password` 变成 `ACTIVE` 后，再创建测试库和兼容旧驱动的账号。
+
+下面的密码请替换成你自己的强密码。如果只是临时测试并想沿用当前 `server/src/configs/mysql.js` 里的默认密码 `123456`，也可以把下方所有 `FeeTest_ChangeMe_2026!` 统一替换成 `123456`；但公网测试环境更建议使用强密码，并在后续 `8.1` 同步修改项目配置。
 
 创建测试库和兼容旧驱动的账号：
 
@@ -417,7 +472,7 @@ SQL
 mysql -h 127.0.0.1 -u fee_test -p platform_test -e "SELECT VERSION();"
 ```
 
-能看到 `8.0.12` 或你的目标 MySQL 版本号，说明数据库侧已经准备好。后续 `8.1` 的项目配置仍按同样的 `host`、`user`、`password`、`database` 填写。
+能看到 MySQL 版本号，例如 `8.0.12` 或 `8.4.10`，说明数据库侧已经准备好。后续 `8.1` 的项目配置仍按同样的 `host`、`user`、`password`、`database` 填写。
 
 ## 六、配置 Redis
 

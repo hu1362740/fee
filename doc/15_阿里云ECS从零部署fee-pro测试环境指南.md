@@ -495,7 +495,144 @@ redis-cli ping
 PONG
 ```
 
-如果后续必须给 Redis 加密码，需要同步修改 `server/src/library/redis/index.js`，把 `redisConfig.password` 传给 `new Redis({ ... })`。
+如果后续必须给 Redis 加密码，需要同步修改项目 Redis 配置和连接封装，不能只改 Redis 服务端配置。具体见下一小节。
+
+### 6.1 可选：后续支持 Redis 密码和 DB 编号
+
+初次部署测试环境时建议先保持 Redis 本机无密码访问，确认项目链路跑通。后续如果测试环境需要更接近生产环境，或者 Redis 需要被其他应用服务器通过内网访问，可以再补充密码支持。
+
+需要修改的地方有三个：
+
+| 位置 | 修改内容 | 作用 |
+| --- | --- | --- |
+| Redis 服务端配置 | 在 `/etc/redis/redis.conf` 中设置 `requirepass`，必要时调整 `bind` | 让 Redis 服务端要求客户端认证 |
+| `server/src/configs/redis.js` | 增加或填写 `password`、`db`，Redis 6 ACL 场景可增加 `username` | 让 fee-pro 有地方读取 Redis 认证和库编号 |
+| `server/src/library/redis/index.js` | 把 `redisConfig.password`、`redisConfig.db` 传给 `new Redis()` | 让 ioredis 实际使用这些配置连接 Redis |
+
+第一步，修改 Redis 服务端配置：
+
+```bash
+sudo vim /etc/redis/redis.conf
+```
+
+找到或新增：
+
+```conf
+bind 127.0.0.1 ::1
+requirepass FeeRedis_ChangeMe_2026!
+```
+
+说明：
+
+- `bind 127.0.0.1 ::1` 表示只允许本机访问 Redis，单机部署时推荐保留。
+- `requirepass` 是 Redis 默认用户的密码。请替换成自己的强密码，不要使用示例密码。
+- 如果以后是多台 ECS 内网访问 Redis，可以把 `bind` 调整为 Redis 服务器的内网 IP，并在阿里云安全组里只放行应用服务器的内网 IP 访问 `6379`，不要向公网开放。
+
+重启并验证：
+
+```bash
+sudo systemctl restart redis-server
+redis-cli ping
+redis-cli -a 'FeeRedis_ChangeMe_2026!' ping
+```
+
+设置密码后，第一条 `redis-cli ping` 可能返回 `NOAUTH Authentication required`，第二条返回 `PONG` 才是预期结果。
+
+第二步，修改项目 Redis 配置：
+
+```bash
+vim server/src/configs/redis.js
+```
+
+以 `testing` 为例：
+
+```js
+const testing = {
+  host: '127.0.0.1',
+  port: '6379',
+  password: 'FeeRedis_ChangeMe_2026!',
+  db: 0
+}
+```
+
+如果使用 Redis 6+ ACL 用户，并且没有使用默认用户，也可以增加：
+
+```js
+username: 'fee_test'
+```
+
+测试环境可以直接写在配置文件里方便验证；更长期的做法是从环境变量或密钥系统读取，例如 `process.env.REDIS_PASSWORD`，避免把真实密码提交到代码仓库。
+
+第三步，修改项目 Redis 连接封装：
+
+```bash
+vim server/src/library/redis/index.js
+```
+
+把原来直接写在 `new Redis({ ... })` 里的配置整理成 `redisOptions`，并补充 `password`、`db`：
+
+```js
+const redisOptions = {
+  port: redisConfig.port,
+  host: redisConfig.host,
+  retryStrategy: (hasRetryTimes) => {
+    // 关闭自动重连功能
+    return false
+  },
+  lazyConnect: true, // 初始化时不能连接Redis Server, 否则会因为无法断开连接, 导致npm run fee命令不能退出
+  showFriendlyErrorStack: true
+}
+
+if (redisConfig.username) {
+  redisOptions.username = redisConfig.username
+}
+
+if (redisConfig.password) {
+  redisOptions.password = redisConfig.password
+}
+
+if (redisConfig.db !== undefined && redisConfig.db !== '') {
+  redisOptions.db = Number(redisConfig.db)
+}
+
+this.redisClient = new Redis(redisOptions)
+```
+
+注意：
+
+- `password` 用来通过 Redis 认证；如果服务端设置了 `requirepass`，这里必须传。
+- `db` 用来选择 Redis 逻辑库，例如 `0`、`1`、`2`。如果不传，ioredis 默认使用 `0` 号库。
+- Redis 的 DB 编号不是强安全隔离，只是同一个 Redis 实例里的逻辑分区。测试、预发、生产如果共用一个 Redis 实例，仍然可能因为误删 key、内存占用、淘汰策略互相影响；更稳妥的做法是使用不同 Redis 实例，或至少使用清晰的 key 前缀。
+
+第四步，重新编译并验证服务端：
+
+```bash
+cd /opt/fee-pro/server
+npm run build
+NODE_ENV=testing node - <<'NODE'
+const redis = require('./dist/library/redis').default
+
+async function main () {
+  try {
+    await redis.asyncSetex('fee_redis_password_check', 30, { ok: true })
+    const result = await redis.asyncGet('fee_redis_password_check')
+    console.log(result)
+  } catch (err) {
+    console.error(err)
+    process.exitCode = 1
+  }
+
+  await redis.redisClient.disconnect()
+}
+
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
+NODE
+```
+
+预期能看到类似 `{ ok: true }` 的输出。只要不再出现 `NOAUTH Authentication required`，并且 Redis 相关功能正常读写，就说明项目侧密码配置已经生效。
 
 ## 七、拉取 fee-pro 代码
 
@@ -672,7 +809,7 @@ const testing = {
 }
 ```
 
-注意：当前 Redis 封装未实际使用 `password` 和 `db`，这里保留字段只是为了和配置结构一致。
+注意：当前 Redis 封装未实际使用 `password` 和 `db`，这里保留字段只是为了和配置结构一致。如果后续启用 Redis 密码或 DB 编号，需要同步完成第 `6.1` 小节的代码改造。
 
 ### 8.3 配置公共开关和 Nginx 日志路径
 
@@ -1369,7 +1506,7 @@ sudo systemctl restart redis-server
 redis-cli ping
 ```
 
-长期方案是修改 `server/src/library/redis/index.js`，给 `new Redis()` 增加 `password: redisConfig.password`。
+长期方案是按第 `6.1` 小节同步修改 `server/src/configs/redis.js` 和 `server/src/library/redis/index.js`，给 `new Redis()` 增加 `password`，必要时同时增加 `username` 和 `db`。
 
 ### 18.4 页面能打开，但登录接口 404
 

@@ -495,6 +495,31 @@ redis-cli ping
 PONG
 ```
 
+这些命令的基本格式是：
+
+```bash
+sudo cp <源文件> <目标文件>
+sudo sed -i 's/<匹配规则>/<替换内容>/' <文件>
+sudo systemctl enable --now <服务名>
+sudo systemctl restart <服务名>
+redis-cli ping
+```
+
+逐条说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `sudo cp /etc/redis/redis.conf /etc/redis/redis.conf.bak.$(date +%Y%m%d%H%M%S)` | 用管理员权限复制 Redis 配置文件，并在备份文件名后追加当前时间 | 修改系统配置前先备份，方便配置写错时恢复。`cp` 是复制文件；`/etc/redis/redis.conf` 是原配置；`.bak.` 表示备份；`$(date +%Y%m%d%H%M%S)` 会执行 `date` 命令并生成类似 `20260720213045` 的时间戳，避免覆盖旧备份 |
+| `sudo sed -i 's/^supervised .*/supervised systemd/' /etc/redis/redis.conf` | 用 `sed` 原地修改配置，把以 `supervised ` 开头的整行替换为 `supervised systemd` | 让 Redis 和 systemd 服务管理方式匹配。`sed -i` 表示直接修改文件；`s/旧内容/新内容/` 是替换语法；`^` 表示行首；`.*` 表示后面任意内容 |
+| `sudo sed -i 's/^bind .*/bind 127.0.0.1 ::1/' /etc/redis/redis.conf` | 用 `sed` 原地修改配置，把以 `bind ` 开头的整行替换为只监听本机地址 | 限制 Redis 只接受本机连接。`127.0.0.1` 是 IPv4 本机回环地址，`::1` 是 IPv6 本机回环地址；这样公网或其他服务器不能直接连到 Redis |
+| `sudo systemctl enable --now redis-server` | 用 systemd 设置 `redis-server` 服务开机自启，并立即启动服务 | `systemctl` 用来管理系统服务；`enable` 表示开机自动启动；`--now` 表示现在立刻启动一次 |
+| `sudo systemctl restart redis-server` | 重启 Redis 服务 | 让前面写入 `/etc/redis/redis.conf` 的配置立即生效。如果 Redis 已经运行，必须重启后才会读取新的监听地址等配置 |
+| `redis-cli ping` | 使用 Redis 命令行客户端向 Redis 发送 `PING` 命令 | 验证当前机器能否连上 Redis。返回 `PONG` 表示 Redis 服务正在运行，并且当前无密码或认证已通过 |
+
+这些命令不依赖当前所在目录，因为用到的是绝对路径 `/etc/redis/redis.conf` 和系统服务名 `redis-server`。如果你的发行版服务名不是 `redis-server`，可以用 `systemctl list-units | grep redis` 查看实际服务名，常见另一个名字是 `redis`。
+
+注意：这两条 `sed` 命令要求配置文件里已经有 `supervised ...` 和 `bind ...` 这两类配置行。Ubuntu/Debian 通过 `apt install redis-server` 安装后通常都有。如果执行后发现配置没有变化，可以手动打开 `/etc/redis/redis.conf` 检查并修改对应配置。
+
 如果后续必须给 Redis 加密码，需要同步修改项目 Redis 配置和连接封装，不能只改 Redis 服务端配置。具体见下一小节。
 
 ### 6.1 可选：后续支持 Redis 密码和 DB 编号

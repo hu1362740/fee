@@ -704,6 +704,37 @@ npm install --no-audit
 npm run build
 ```
 
+`npm install --no-audit` 的基本格式是：
+
+```bash
+npm install [选项]
+```
+
+其中 `--no-audit` 表示本次安装时不执行 npm 的安全漏洞审计请求。它的作用是：
+
+- 仍然正常安装 `package.json` 里的依赖。
+- 不在安装过程中额外请求 npm registry 的 audit 接口。
+- 输出更干净，安装速度可能略快。
+- 在服务器网络较慢、npm audit 接口访问不稳定、老项目依赖漏洞提示很多时，减少和部署主流程无关的干扰。
+
+`npm install` 和 `npm install --no-audit` 的区别：
+
+| 命令 | 会安装依赖 | 会执行 npm audit | 适用场景 |
+| --- | --- | --- | --- |
+| `npm install` | 会 | 默认会 | 本地开发、希望顺便看到安全审计提示时使用 |
+| `npm install --no-audit` | 会 | 不会 | 服务器部署、测试环境快速安装、老项目减少审计噪音时使用 |
+
+是否必要：
+
+- `npm install` 是必要的。没有安装依赖，`npm run build`、`node dist/app.js`、`pm2` 启动服务通常都会失败。
+- `--no-audit` 不是必要的，只是部署时推荐加上。去掉也可以，写成 `npm install` 同样能安装依赖。
+- `--no-audit` 不会修复安全漏洞，也不会让依赖更安全；它只是跳过“安装过程中的审计报告”。如果要单独查看漏洞，可以在依赖装好后手动运行 `npm audit`。
+
+Windows 下为什么看起来只需要 `npm install`：
+
+- Windows 本地开发时，执行 `npm install` 确实可以；在 Ubuntu ECS 上执行 `npm install` 也可以。
+- 本文写成 `npm install --no-audit`，不是因为 Ubuntu 必须这么写，而是为了服务器部署更稳定、少一些 audit 网络请求和老依赖漏洞提示。
+
 构建完成后应出现：
 
 ```text

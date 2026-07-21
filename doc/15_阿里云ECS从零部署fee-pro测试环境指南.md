@@ -1023,11 +1023,27 @@ START_YM=$(date '+%Y-%m')
 END_YM=$(date -d '+12 months' '+%Y-%m')
 
 npm run test_fee -- Utils:GenerateSQL 1 "$START_YM" "$END_YM" > init.sql
-tail -n +3 init.sql > init.clean.sql
+sed -n '/-- Adminer 4.3.1 MySQL dump/,$p' init.sql > init.clean.sql
+head -n 8 init.clean.sql
+grep -n '^>' init.clean.sql
 mysql -h 127.0.0.1 -u fee_test -p platform_test < init.clean.sql
 ```
 
 输入数据库密码。
+
+命令说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `START_YM=$(date '+%Y-%m')` | 把当前年月赋值给 `START_YM`，格式为 `YYYY-MM` | 作为建表开始月份。例如 `2026-07` |
+| `END_YM=$(date -d '+12 months' '+%Y-%m')` | 把当前日期往后推 12 个月，再取年月赋值给 `END_YM` | 作为建表结束月份。例如当前是 `2026-07`，这里通常得到 `2027-07` |
+| `npm run test_fee -- Utils:GenerateSQL 1 "$START_YM" "$END_YM" > init.sql` | 在 `testing` 环境执行 fee-pro CLI 命令 `Utils:GenerateSQL`，给项目 `1` 生成指定月份范围内的建表 SQL，并写入 `init.sql` | 生成公共表和项目 `1` 的按月分表 SQL。`--` 后面的参数会传给 `dist/fee.js`；`>` 表示把命令输出保存到文件 |
+| `sed -n '/-- Adminer 4.3.1 MySQL dump/,$p' init.sql > init.clean.sql` | 从 `init.sql` 中找到真正 SQL 开始的标记行，并从该行一直输出到文件结尾，保存为 `init.clean.sql` | 清理 `npm run` 产生的命令提示行，只保留可导入 MySQL/MariaDB 的 SQL。不要再使用 `tail -n +3`，因为不同 npm 版本输出的头部行数可能不同 |
+| `head -n 8 init.clean.sql` | 查看 `init.clean.sql` 前 8 行 | 确认清理后的文件开头是 `-- Adminer 4.3.1 MySQL dump`，而不是 `> platform@...` 或 `> NODE_ENV=...` |
+| `grep -n '^>' init.clean.sql` | 查找 `init.clean.sql` 中是否还有以 `>` 开头的 npm 输出行 | 正常情况下这条命令没有任何输出。如果仍然输出 `> platform@...` 或 `> NODE_ENV=...`，说明 SQL 文件还没有清理干净，不要导入数据库 |
+| `mysql -h 127.0.0.1 -u fee_test -p platform_test < init.clean.sql` | 使用 `fee_test` 用户连接本机数据库 `platform_test`，并把 `init.clean.sql` 输入给 MySQL/MariaDB 执行 | 真正创建 fee-pro 需要的数据库表。执行后会提示输入数据库密码，输入时屏幕不显示字符是正常现象 |
+
+注意：`Utils:GenerateSQL` 的结束月份是包含在内的。例如 `START_YM=2026-07`、`END_YM=2027-07`，会生成 `2026-07` 到 `2027-07` 这一段月份的分表。
 
 导入模板项目和默认管理员账号：
 
@@ -1464,7 +1480,7 @@ START_YM=$(date '+%Y-%m')
 END_YM=$(date -d '+12 months' '+%Y-%m')
 
 npm run test_fee -- Utils:GenerateSQL 2 "$START_YM" "$END_YM" > project_2.sql
-tail -n +3 project_2.sql > project_2.clean.sql
+sed -n '/-- Adminer 4.3.1 MySQL dump/,$p' project_2.sql > project_2.clean.sql
 mysql -h 127.0.0.1 -u fee_test -p platform_test < project_2.clean.sql
 ```
 

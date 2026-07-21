@@ -1085,6 +1085,27 @@ sudo usermod -aG adm fee
 newgrp adm
 ```
 
+这两条命令的基本格式是：
+
+```bash
+sudo usermod -aG <用户组> <用户名>
+newgrp <用户组>
+```
+
+逐条说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `sudo usermod -aG adm fee` | 用管理员权限把用户 `fee` 追加加入 `adm` 用户组 | `usermod` 用来修改用户信息；`-G adm` 表示设置附加用户组为 `adm`；`-a` 表示追加，不覆盖用户原来已有的附加组。这里不要漏掉 `-a`，否则可能把 `fee` 原来的其他附加组覆盖掉 |
+| `newgrp adm` | 在当前终端开启一个以 `adm` 为当前组的新 shell | 让当前会话尽快识别新的组权限。否则通常需要退出登录后重新登录，`fee` 用户才会拿到刚加入的 `adm` 组权限 |
+
+为什么要加入 `adm` 组：
+
+- Nginx 日志通常在 `/var/log/nginx/` 下，默认不允许普通用户随便读取。
+- 本项目的 `SaveLog:Nginx` 任务会由 PM2 下的普通部署用户 `fee` 执行。
+- 如果 `fee` 不能读取 `/var/log/nginx/fee-access.log`，后续日志保存、解析和统计链路就读不到 SDK 上报日志。
+- 把 `fee` 加入 `adm` 组，再把日志文件的属组设置为 `adm`，可以让 `fee` 在不使用 `root` 运行项目的情况下读取 Nginx 日志。
+
 创建日志文件并设置权限：
 
 ```bash
@@ -1093,7 +1114,40 @@ sudo chgrp adm /var/log/nginx/fee-access.log
 sudo chmod 640 /var/log/nginx/fee-access.log
 ```
 
+这三条命令的基本格式是：
+
+```bash
+sudo touch <文件路径>
+sudo chgrp <用户组> <文件路径>
+sudo chmod <权限数字> <文件路径>
+```
+
+逐条说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `sudo touch /var/log/nginx/fee-access.log` | 用管理员权限创建空的 Nginx 业务访问日志文件；如果文件已存在，则只更新文件时间 | 确保后续 `chgrp`、`chmod` 和 Nginx `access_log` 指向的日志文件存在 |
+| `sudo chgrp adm /var/log/nginx/fee-access.log` | 把日志文件的所属用户组改成 `adm` | 让已经加入 `adm` 组的 `fee` 用户具备按组读取该日志文件的条件 |
+| `sudo chmod 640 /var/log/nginx/fee-access.log` | 把文件权限设置为 `rw-r-----` | 文件所有者通常是 `root`，拥有读写权限；`adm` 组拥有读权限；其他用户没有任何权限。这样既能让 Nginx 写日志、让 `fee` 读日志，又避免所有用户都能读取日志 |
+
+`640` 的含义：
+
+| 数字 | 对象 | 权限 | 含义 |
+| --- | --- | --- | --- |
+| `6` | 文件所有者 | `rw-` | 可以读、写 |
+| `4` | 所属用户组 | `r--` | 可以读，不能写 |
+| `0` | 其他用户 | `---` | 不能读、不能写、不能执行 |
+
 如果你当前不是 `fee` 用户，按实际部署用户替换命令里的 `fee`。
+
+执行完成后可以检查权限：
+
+```bash
+ls -l /var/log/nginx/fee-access.log
+groups fee
+```
+
+预期能看到日志文件的所属组是 `adm`，并且 `fee` 用户的用户组列表里包含 `adm`。如果当前终端执行 `newgrp adm` 后行为不符合预期，可以退出 SSH 后重新登录，再继续后续步骤。
 
 ### 11.2 写入 Nginx 站点配置
 

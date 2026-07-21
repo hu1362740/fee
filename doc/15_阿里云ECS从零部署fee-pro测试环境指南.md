@@ -516,6 +516,54 @@ redis-cli ping
 | `sudo systemctl restart redis-server` | 重启 Redis 服务 | 让前面写入 `/etc/redis/redis.conf` 的配置立即生效。如果 Redis 已经运行，必须重启后才会读取新的监听地址等配置 |
 | `redis-cli ping` | 使用 Redis 命令行客户端向 Redis 发送 `PING` 命令 | 验证当前机器能否连上 Redis。返回 `PONG` 表示 Redis 服务正在运行，并且当前无密码或认证已通过 |
 
+重点解释一下这条命令：
+
+```bash
+sudo sed -i 's/^supervised .*/supervised systemd/' /etc/redis/redis.conf
+```
+
+它的作用是把 Redis 配置文件中类似下面这样的行：
+
+```conf
+supervised no
+```
+
+替换成：
+
+```conf
+supervised systemd
+```
+
+命令拆开看：
+
+| 片段 | 含义 |
+| --- | --- |
+| `sudo` | 用管理员权限修改 `/etc/redis/redis.conf` 这种系统配置文件 |
+| `sed` | Linux 常用的文本处理工具 |
+| `-i` | 直接修改原文件，而不是只把修改结果打印到终端 |
+| `'s/^supervised .*/supervised systemd/'` | 替换规则：把以 `supervised ` 开头的整行替换成 `supervised systemd` |
+| `/etc/redis/redis.conf` | 要修改的 Redis 配置文件 |
+
+其中 `supervised` 是 Redis 的进程监管配置项，用来告诉 Redis：当前进程是否由外部服务管理器监管，以及应该用哪种方式和服务管理器配合。
+
+常见取值可以这样理解：
+
+| 配置 | 含义 | 适用场景 |
+| --- | --- | --- |
+| `supervised no` | Redis 不主动配合外部服务管理器，只按普通进程方式运行 | 手动运行 Redis、简单开发环境、容器内由前台进程管理时比较常见 |
+| `supervised systemd` | Redis 按 systemd 方式运行，并向 systemd 报告启动状态 | Ubuntu/Debian 服务器上通过 `systemctl start/restart redis-server` 管理 Redis 时推荐使用 |
+
+本文后续使用的是：
+
+```bash
+sudo systemctl enable --now redis-server
+sudo systemctl restart redis-server
+```
+
+也就是说 Redis 是交给 systemd 管理的。把 `supervised` 改成 `systemd`，可以让 Redis 和 systemd 的管理方式一致，便于 `systemctl status redis-server` 正确显示服务状态，也更符合 Ubuntu/Debian 软件包的服务管理习惯。
+
+注意：`supervised systemd` 不是 Redis 密码配置，也不是网络访问控制配置。它只影响 Redis 进程和 systemd 之间的服务监管方式。真正控制访问来源的是 `bind 127.0.0.1 ::1`，真正控制密码认证的是后面可选小节里的 `requirepass`。
+
 这些命令不依赖当前所在目录，因为用到的是绝对路径 `/etc/redis/redis.conf` 和系统服务名 `redis-server`。如果你的发行版服务名不是 `redis-server`，可以用 `systemctl list-units | grep redis` 查看实际服务名，常见另一个名字是 `redis`。
 
 注意：这两条 `sed` 命令要求配置文件里已经有 `supervised ...` 和 `bind ...` 这两类配置行。Ubuntu/Debian 通过 `apt install redis-server` 安装后通常都有。如果执行后发现配置没有变化，可以手动打开 `/etc/redis/redis.conf` 检查并修改对应配置。

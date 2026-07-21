@@ -1106,6 +1106,33 @@ newgrp <用户组>
 - 如果 `fee` 不能读取 `/var/log/nginx/fee-access.log`，后续日志保存、解析和统计链路就读不到 SDK 上报日志。
 - 把 `fee` 加入 `adm` 组，再把日志文件的属组设置为 `adm`，可以让 `fee` 在不使用 `root` 运行项目的情况下读取 Nginx 日志。
 
+这里容易和第二章创建部署用户时的分组混淆。前面执行过：
+
+```bash
+adduser fee
+usermod -aG sudo fee
+su - fee
+```
+
+它们和这里的 `adm` 组不是一回事：
+
+| 用户或用户组 | 作用 | 和本项目的关系 |
+| --- | --- | --- |
+| `fee` 用户 | 普通部署用户 | 用来拉代码、安装依赖、构建项目、运行 PM2，避免长期用 `root` 跑应用 |
+| `fee` 组 | 创建 `fee` 用户时通常自动创建的同名主组 | 主要用于 `/opt/fee-pro` 这类项目文件的普通读写权限 |
+| `sudo` 组 | 允许用户在命令前加 `sudo`，临时以管理员权限执行命令 | 适合手动执行 `sudo systemctl reload nginx`、`sudo vim /etc/nginx/...` 等运维命令 |
+| `adm` 组 | Ubuntu/Debian 上常用来授予读取系统日志的权限 | 让 `fee` 用户以普通身份读取 `/var/log/nginx/fee-access.log`，供 `SaveLog:Nginx` 后台任务使用 |
+
+`sudo` 组并不等于普通运行时自动拥有 `/var/log/nginx/` 的读取权限。它只表示 `fee` 用户可以手动执行 `sudo <命令>`。例如你手动执行：
+
+```bash
+sudo tail -n 10 /var/log/nginx/fee-access.log
+```
+
+能读取日志，是因为这条命令临时提权成了管理员。但 PM2 下的 `fee-task-manager`、`SaveLog:Nginx` 是普通后台进程，不会自动带着 `sudo` 权限，也不会在读取文件时帮你输入 sudo 密码。因此不能只依赖 `sudo` 组解决程序读日志的问题。
+
+更推荐的权限设计是：应用仍然用普通 `fee` 用户运行，只把它加入能读取日志的 `adm` 组，并把 `/var/log/nginx/fee-access.log` 设置为 `adm` 组可读。这样权限范围更小，也避免用 `root` 或 `sudo` 跑 Node 任务。
+
 创建日志文件并设置权限：
 
 ```bash

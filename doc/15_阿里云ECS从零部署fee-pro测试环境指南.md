@@ -1076,37 +1076,31 @@ project_name: template
 
 ## 十一、配置 Nginx
 
-### 11.1 让应用用户能读 Nginx 日志
+本章要让 Nginx 做三件事：
 
-`SaveLog:Nginx` 会由 PM2 下的 `fee` 用户读取 `/var/log/nginx/fee-access.log`。把 `fee` 加入 `adm` 组：
+- 对外提供前端静态页面：访问 `http://8.138.93.199/` 时返回 `client/dist`。
+- 代理后端接口：把 `/api/*` 和 `/project/<id>/api/*` 转发到本机 `127.0.0.1:3000`。
+- 接收 SDK 打点：把 `/dig?d=...` 请求写入 `/var/log/nginx/fee-access.log`，供 `SaveLog:Nginx` 后续读取。
+
+### 11.1 准备 Nginx 日志读取权限
+
+`SaveLog:Nginx` 会由 PM2 下的普通部署用户 `fee` 执行，它需要读取 `/var/log/nginx/fee-access.log`。推荐做法是：应用仍然用普通用户运行，只给它读取这一个日志文件所需的最小权限。
+
+#### 11.1.1 把 `fee` 加入 `adm` 组
 
 ```bash
 sudo usermod -aG adm fee
 newgrp adm
 ```
 
-这两条命令的基本格式是：
-
-```bash
-sudo usermod -aG <用户组> <用户名>
-newgrp <用户组>
-```
-
 逐条说明：
 
 | 命令 | 含义 | 作用 |
 | --- | --- | --- |
-| `sudo usermod -aG adm fee` | 用管理员权限把用户 `fee` 追加加入 `adm` 用户组 | `usermod` 用来修改用户信息；`-G adm` 表示设置附加用户组为 `adm`；`-a` 表示追加，不覆盖用户原来已有的附加组。这里不要漏掉 `-a`，否则可能把 `fee` 原来的其他附加组覆盖掉 |
-| `newgrp adm` | 在当前终端开启一个以 `adm` 为当前组的新 shell | 让当前会话尽快识别新的组权限。否则通常需要退出登录后重新登录，`fee` 用户才会拿到刚加入的 `adm` 组权限 |
+| `sudo usermod -aG adm fee` | 用管理员权限把用户 `fee` 追加加入 `adm` 用户组 | `adm` 组在 Ubuntu/Debian 上常用于授予系统日志读取权限；`-aG` 表示追加到附加组，不覆盖原有组 |
+| `newgrp adm` | 在当前终端开启一个以 `adm` 为当前组的新 shell | 让当前会话尽快识别新的组权限；如果不生效，退出 SSH 后重新登录即可 |
 
-为什么要加入 `adm` 组：
-
-- Nginx 日志通常在 `/var/log/nginx/` 下，默认不允许普通用户随便读取。
-- 本项目的 `SaveLog:Nginx` 任务会由 PM2 下的普通部署用户 `fee` 执行。
-- 如果 `fee` 不能读取 `/var/log/nginx/fee-access.log`，后续日志保存、解析和统计链路就读不到 SDK 上报日志。
-- 把 `fee` 加入 `adm` 组，再把日志文件的属组设置为 `adm`，可以让 `fee` 在不使用 `root` 运行项目的情况下读取 Nginx 日志。
-
-这里容易和第二章创建部署用户时的分组混淆。前面执行过：
+前面第二章已经创建过部署用户，并把它加入 `sudo` 组：
 
 ```bash
 adduser fee
@@ -1114,26 +1108,18 @@ usermod -aG sudo fee
 su - fee
 ```
 
-它们和这里的 `adm` 组不是一回事：
+这里的 `fee`、`sudo`、`adm` 不是一回事：
 
 | 用户或用户组 | 作用 | 和本项目的关系 |
 | --- | --- | --- |
-| `fee` 用户 | 普通部署用户 | 用来拉代码、安装依赖、构建项目、运行 PM2，避免长期用 `root` 跑应用 |
+| `fee` 用户 | 普通部署用户 | 用来拉代码、安装依赖、构建项目、运行 PM2 |
 | `fee` 组 | 创建 `fee` 用户时通常自动创建的同名主组 | 主要用于 `/opt/fee-pro` 这类项目文件的普通读写权限 |
-| `sudo` 组 | 允许用户在命令前加 `sudo`，临时以管理员权限执行命令 | 适合手动执行 `sudo systemctl reload nginx`、`sudo vim /etc/nginx/...` 等运维命令 |
-| `adm` 组 | Ubuntu/Debian 上常用来授予读取系统日志的权限 | 让 `fee` 用户以普通身份读取 `/var/log/nginx/fee-access.log`，供 `SaveLog:Nginx` 后台任务使用 |
+| `sudo` 组 | 允许用户手动执行 `sudo <命令>` | 适合手动执行 `sudo systemctl reload nginx`、`sudo vim /etc/nginx/...` 等运维命令 |
+| `adm` 组 | 授予读取部分系统日志的权限 | 让 `fee` 用户以普通身份读取 `/var/log/nginx/fee-access.log` |
 
-`sudo` 组并不等于普通运行时自动拥有 `/var/log/nginx/` 的读取权限。它只表示 `fee` 用户可以手动执行 `sudo <命令>`。例如你手动执行：
+`sudo` 组并不表示普通后台进程自动拥有 `/var/log/nginx/` 读取权限。PM2 下的 `fee-task-manager` 和 `SaveLog:Nginx` 不会自动带着 `sudo` 权限，也不会在读取文件时帮你输入 sudo 密码。因此不要为了读日志而把 Node 任务改成 `sudo node ...` 或用 root 跑。
 
-```bash
-sudo tail -n 10 /var/log/nginx/fee-access.log
-```
-
-能读取日志，是因为这条命令临时提权成了管理员。但 PM2 下的 `fee-task-manager`、`SaveLog:Nginx` 是普通后台进程，不会自动带着 `sudo` 权限，也不会在读取文件时帮你输入 sudo 密码。因此不能只依赖 `sudo` 组解决程序读日志的问题。
-
-更推荐的权限设计是：应用仍然用普通 `fee` 用户运行，只把它加入能读取日志的 `adm` 组，并把 `/var/log/nginx/fee-access.log` 设置为 `adm` 组可读。这样权限范围更小，也避免用 `root` 或 `sudo` 跑 Node 任务。
-
-创建日志文件并设置权限：
+#### 11.1.2 创建日志文件并设置权限
 
 ```bash
 sudo touch /var/log/nginx/fee-access.log
@@ -1141,21 +1127,13 @@ sudo chgrp adm /var/log/nginx/fee-access.log
 sudo chmod 640 /var/log/nginx/fee-access.log
 ```
 
-这三条命令的基本格式是：
-
-```bash
-sudo touch <文件路径>
-sudo chgrp <用户组> <文件路径>
-sudo chmod <权限数字> <文件路径>
-```
-
 逐条说明：
 
 | 命令 | 含义 | 作用 |
 | --- | --- | --- |
-| `sudo touch /var/log/nginx/fee-access.log` | 用管理员权限创建空的 Nginx 业务访问日志文件；如果文件已存在，则只更新文件时间 | 确保后续 `chgrp`、`chmod` 和 Nginx `access_log` 指向的日志文件存在 |
-| `sudo chgrp adm /var/log/nginx/fee-access.log` | 把日志文件的所属用户组改成 `adm` | 让已经加入 `adm` 组的 `fee` 用户具备按组读取该日志文件的条件 |
-| `sudo chmod 640 /var/log/nginx/fee-access.log` | 把文件权限设置为 `rw-r-----` | 文件所有者通常是 `root`，拥有读写权限；`adm` 组拥有读权限；其他用户没有任何权限。这样既能让 Nginx 写日志、让 `fee` 读日志，又避免所有用户都能读取日志 |
+| `sudo touch /var/log/nginx/fee-access.log` | 创建空日志文件；如果文件已存在，则更新文件时间 | 确保后续 `chgrp`、`chmod` 和 Nginx `access_log` 指向的文件存在 |
+| `sudo chgrp adm /var/log/nginx/fee-access.log` | 把日志文件所属用户组改成 `adm` | 让已经加入 `adm` 组的 `fee` 用户具备按组读取该文件的条件 |
+| `sudo chmod 640 /var/log/nginx/fee-access.log` | 把文件权限设置为 `rw-r-----` | 文件所有者可读写，`adm` 组可读，其他用户无权限 |
 
 `640` 的含义：
 
@@ -1165,20 +1143,31 @@ sudo chmod <权限数字> <文件路径>
 | `4` | 所属用户组 | `r--` | 可以读，不能写 |
 | `0` | 其他用户 | `---` | 不能读、不能写、不能执行 |
 
-如果你当前不是 `fee` 用户，按实际部署用户替换命令里的 `fee`。
+如果你的部署用户不是 `fee`，把命令中的 `fee` 替换为实际用户。
 
-执行完成后可以检查权限：
+#### 11.1.3 检查权限
 
 ```bash
 ls -l /var/log/nginx/fee-access.log
 groups fee
 ```
 
-预期能看到日志文件的所属组是 `adm`，并且 `fee` 用户的用户组列表里包含 `adm`。如果当前终端执行 `newgrp adm` 后行为不符合预期，可以退出 SSH 后重新登录，再继续后续步骤。
+预期结果：
+
+- `fee-access.log` 的所属组是 `adm`。
+- `groups fee` 的输出中包含 `adm`。
 
 ### 11.2 写入 Nginx 站点配置
 
-创建配置文件：
+先确认前端构建产物存在：
+
+```bash
+ls -l /opt/fee-pro/client/dist/index.html
+```
+
+如果文件不存在，请先回到第九章执行前端构建。然后写入 Nginx 配置文件。
+
+注意：把下面配置里的 `8.138.93.199` 替换成你的 ECS 公网 IP；如果没有域名，可以先保留或删除 `test.com`。
 
 ```bash
 sudo tee /etc/nginx/conf.d/fee-pro.conf > /dev/null <<'NGINX'
@@ -1248,7 +1237,68 @@ server {
 NGINX
 ```
 
-检查并重载：
+### 11.3 配置文件写入命令说明
+
+重点是第一行：
+
+```bash
+sudo tee /etc/nginx/conf.d/fee-pro.conf > /dev/null <<'NGINX'
+```
+
+| 片段 | 含义 | 作用 |
+| --- | --- | --- |
+| `sudo` | 用管理员权限执行 | `/etc/nginx/conf.d/` 是系统配置目录，普通用户通常不能写 |
+| `tee /etc/nginx/conf.d/fee-pro.conf` | 把后面的多行内容写入指定文件 | 创建或覆盖 fee-pro 的 Nginx 站点配置 |
+| `> /dev/null` | 丢弃 `tee` 默认打印到终端的内容 | 避免整份 Nginx 配置在终端重复刷屏 |
+| `<<'NGINX'` | Here Document，多行文本输入开始 | 从下一行开始，直到单独一行 `NGINX` 为止，中间内容都会写入文件 |
+
+`<<'NGINX'` 的单引号很重要。Nginx 配置里有 `$host`、`$request_uri`、`$remote_addr` 等 Nginx 变量，如果没有单引号，Shell 可能提前把它们当作 Linux 环境变量展开，导致写入的 Nginx 配置不正确。
+
+最后一行单独的：
+
+```bash
+NGINX
+```
+
+表示多行输入结束。
+
+### 11.4 Nginx 配置内容说明
+
+#### 11.4.1 `log_format fee_main`
+
+```nginx
+log_format fee_main '...';
+```
+
+这行定义了名为 `fee_main` 的 Nginx 日志格式。`/dig` 打点入口会使用它写入 SDK 上报日志：
+
+```nginx
+access_log /var/log/nginx/fee-access.log fee_main;
+```
+
+这个格式使用 `\t` 作为字段分隔符。服务端 `SaveLog:Nginx` 读取日志时会按 Tab 切割字段，并从固定位置取出请求地址、User-Agent 和 IP 等信息，所以不要随意调整字段顺序。尤其是 `$request_uri` 很关键，SDK 上报数据在 `/dig?d=...` 的 `d` 参数里。
+
+#### 11.4.2 `server` 和 `location`
+
+| 配置 | 作用 |
+| --- | --- |
+| `listen 80` | 监听 HTTP 80 端口 |
+| `server_name 8.138.93.199 test.com` | 指定这个站点响应的 IP 或域名 |
+| `root /opt/fee-pro/client/dist` | 指向 Vue 前端生产构建目录 |
+| `access_log /var/log/nginx/fee-web-access.log` | 记录普通网页访问日志 |
+| `error_log /var/log/nginx/fee-error.log` | 记录 Nginx 错误日志 |
+| `location = /dig` | SDK 打点入口，返回 1px 空 GIF，并把请求写入 `fee-access.log` |
+| `location ^~ /api/` | 把后台管理接口转发到后端 `127.0.0.1:3000` |
+| `location ~ ^/project/\d+/api/` | 把项目维度接口转发到后端 `127.0.0.1:3000` |
+| `location ~* \.(...)$` | 静态资源缓存规则 |
+| `location /` | Vue 单页应用兜底，刷新前端路由时返回 `index.html` |
+| `location ~ /\.(git|env)` | 禁止访问 `.git`、`.env` 等敏感路径 |
+
+`/api/` 和 `/project/<id>/api/` 代理到的是本机后端端口 `3000`。在第十二章启动后端之前，这些接口可能还不可用，但前端静态页面本身应该能由 Nginx 返回。
+
+### 11.5 检查、启动并重载 Nginx
+
+写完配置后执行：
 
 ```bash
 sudo nginx -t
@@ -1256,13 +1306,54 @@ sudo systemctl enable --now nginx
 sudo systemctl reload nginx
 ```
 
+逐条说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `sudo nginx -t` | 测试 Nginx 配置语法 | 只检查配置，不启动也不重载。看到 `syntax is ok` 和 `test is successful` 才继续 |
+| `sudo systemctl enable --now nginx` | 设置 Nginx 开机自启，并立即启动 | 第一次部署时执行，确保 Nginx 当前已启动，重启 ECS 后也会自动启动 |
+| `sudo systemctl reload nginx` | 平滑重新加载 Nginx 配置 | 让刚写入的 `fee-pro.conf` 生效；以后每次改 Nginx 配置后都应先 `nginx -t` 再 `reload` |
+
+如果 `sudo nginx -t` 报错，不要继续执行 `reload`，先根据错误行号修复配置。
+
+### 11.6 访问前检查
+
+确认 Nginx 本机能返回前端：
+
+```bash
+curl -I http://127.0.0.1/
+```
+
+预期返回 `HTTP/1.1 200 OK` 或其他 2xx/3xx 状态。如果返回 404、403 或 502，先看 Nginx 错误日志：
+
+```bash
+sudo tail -n 80 /var/log/nginx/fee-error.log
+sudo tail -n 80 /var/log/nginx/error.log
+```
+
+确认阿里云安全组和系统防火墙已经放行 HTTP 80 端口。安全组入方向需要允许：
+
+```text
+协议：自定义 TCP
+端口范围：80/80
+授权对象：0.0.0.0/0
+```
+
+如果启用了 UFW，也要确认：
+
+```bash
+sudo ufw status verbose
+```
+
+里面包含 `80/tcp ALLOW`。
+
 浏览器访问：
 
 ```text
 http://8.138.93.199/
 ```
 
-此时前端静态页面应能打开，但后端还没有启动，登录接口可能暂时不可用。
+此时前端静态页面应能打开。后端还会在第十二章启动，所以登录接口或 `/api/*` 在这一步暂时不可用是正常的。
 
 ## 十二、启动后端和任务进程
 

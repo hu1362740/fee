@@ -1390,6 +1390,15 @@ pm2 logs fee-task-manager --lines 80
 curl http://127.0.0.1:3000/api/login/type
 ```
 
+本节中几个命令说明：
+
+| 命令 | 含义 | 作用 |
+| --- | --- | --- |
+| `cd /opt/fee-pro/server` | 切换当前终端目录到服务端项目目录 | 后续 `pm2 start`、查看日志、执行服务端脚本等命令都默认在 `server` 目录下运行，避免路径找不到配置文件或 PM2 配置文件 |
+| `mkdir -p log/pm2/app log/pm2/command` | 创建 PM2 日志目录 | `-p` 表示父目录不存在时一并创建，目录已存在时不报错。这里提前创建 `fee-app` 和 `fee-task-manager` 配置中使用的日志目录，避免 PM2 写日志时报目录不存在 |
+| `pm2 logs fee-app --lines 80` | 查看 PM2 中 `fee-app` 进程最近 80 行日志 | 用来确认 Web/API 服务是否启动成功，以及是否有端口占用、数据库连接失败、配置错误等异常 |
+| `curl http://127.0.0.1:3000/api/login/type` | 在 ECS 本机访问后端登录类型接口 | 绕过 Nginx 和公网安全组，直接验证 Node/Express 后端 `3000` 端口是否正常工作。正常应返回 JSON，内容里能看到登录类型为 `normal` |
+
 验证 Nginx 代理接口：
 
 ```bash
@@ -1413,6 +1422,21 @@ sudo env PATH=$PATH:/home/fee/.nvm/versions/node/v12.22.12/bin \
   /home/fee/.nvm/versions/node/v12.22.12/lib/node_modules/pm2/bin/pm2 \
   startup systemd -u fee --hp /home/fee
 ```
+
+这条命令的作用是：让 PM2 为当前服务器生成并注册一个 `systemd` 开机启动服务。以后 ECS 重启后，系统会先启动 PM2，再由 PM2 恢复你通过 `pm2 save` 保存的进程列表，例如 `fee-app` 和 `fee-task-manager`。
+
+命令拆开看：
+
+| 片段 | 含义 | 作用 |
+| --- | --- | --- |
+| `sudo` | 用管理员权限执行 | 注册 systemd 服务需要写入系统级服务配置，普通用户没有权限 |
+| `env PATH=$PATH:/home/fee/.nvm/versions/node/v12.22.12/bin` | 在 sudo 环境里补充 Node.js 的 PATH | 使用 nvm 安装 Node 时，Node 不在系统默认路径里；这里告诉 systemd/PM2 去哪里找 `node` |
+| `/home/fee/.nvm/versions/node/v12.22.12/lib/node_modules/pm2/bin/pm2` | PM2 可执行文件的完整路径 | 避免 sudo 环境找不到 `pm2` 命令 |
+| `startup systemd` | 让 PM2 生成 systemd 启动脚本 | 适用于 Ubuntu 这类使用 systemd 管理服务的系统 |
+| `-u fee` | 指定开机后用 `fee` 用户运行 PM2 | 保持应用仍由普通部署用户运行，不用 root 跑项目 |
+| `--hp /home/fee` | 指定 `fee` 用户的 home 目录 | 让 PM2 能找到该用户自己的 PM2 配置和进程列表 |
+
+注意：不要直接照抄固定路径。`/home/fee/.nvm/versions/node/v12.22.12/...` 要以你服务器上 `pm2 startup` 实际输出为准；如果 Node 版本、用户名或安装方式不同，这里的路径也会不同。
 
 以你机器上 `pm2 startup` 的实际输出为准。然后保存当前进程列表：
 

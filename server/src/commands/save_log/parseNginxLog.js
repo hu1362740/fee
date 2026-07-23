@@ -6,6 +6,7 @@ import commonConfig from '~/src/configs/common'
 import SaveLogBase from '~/src/commands/save_log/base'
 import LKafka from '~/src/library/kafka'
 import path from 'path'
+import os from 'os'
 
 /**
  * NginxParseLog 类
@@ -49,60 +50,40 @@ class NginxParseLog extends SaveLogBase {
     let legalLogCounter = 0 // 合法且未因抽样被跳过的日志行数计数器
     let nginxLogFilePath = commonConfig.nginxLogFilePath // 从配置中获取 Nginx 日志根目录
 
-    // 【修改点】智能检测多种日志文件模式，以兼容不同操作系统和部署方式
     let logAbsolutePath = null
+    const timeMoment = moment.unix(moment().unix() - 60)
 
-    // 模式 1: Windows 按分钟分割 (通过 PowerShell 脚本分割，路径包含 fee-access/YYYY/MM/DD/HH/mm/log)
-    const windowsSplitLogDir = path.join(nginxLogFilePath, 'fee-access')
-    if (!logAbsolutePath) {
-      let timeAt = moment().unix() - 60 // 获取一分钟前的时间戳，因为当前分钟的日志可能尚未完全写入
-      let timeMoment = moment.unix(timeAt)
-      let formatStr = timeMoment.format('YYYY/MM/DD/HH/mm')
-      let windowsSplitLogFile = path.join(windowsSplitLogDir, formatStr, 'log')
-
-      if (fs.existsSync(windowsSplitLogFile)) {
-        logAbsolutePath = windowsSplitLogFile
-        that.log(`[兼容模式] 检测到 Windows 分割日志，使用 fee-access/YYYY/MM/DD/HH/mm/log 模式`)
+    if (os.platform() === 'linux') {
+      logAbsolutePath = path.join(nginxLogFilePath, `${timeMoment.format('YYYY/MM/DD/HH/mm')}.log`)
+      if (fs.existsSync(logAbsolutePath) === false) {
+        that.log(`[Linux] 分钟分片日志不存在，自动跳过 => ${logAbsolutePath}`)
+        return
       }
-    }
-
-    // 模式 2: fee-access.log (Windows 开发环境常见的单文件模式)
-    if (!logAbsolutePath) {
+      that.log(`[Linux] 使用分钟分片日志 => ${logAbsolutePath}`)
+    } else if (os.platform() === 'win32') {
+      const windowsSplitLogFile = path.join(
+        nginxLogFilePath,
+        'fee-access',
+        timeMoment.format('YYYY/MM/DD/HH/mm'),
+        'log'
+      )
       const feeAccessLogFile = path.join(nginxLogFilePath, 'fee-access.log')
-      if (fs.existsSync(feeAccessLogFile)) {
-        logAbsolutePath = feeAccessLogFile
-        that.log(`[兼容模式] 检测到 fee-access.log，使用 Windows 单文件模式`)
-      }
-    }
-
-    // 模式 3: access.log (标准 Nginx 默认日志文件名)
-    if (!logAbsolutePath) {
       const standardAccessLogFile = path.join(nginxLogFilePath, 'access.log')
-      if (fs.existsSync(standardAccessLogFile)) {
-        logAbsolutePath = standardAccessLogFile
-        that.log(`[兼容模式] 检测到 access.log，使用标准单文件模式`)
+      const logFileCandidates = [
+        windowsSplitLogFile,
+        feeAccessLogFile,
+        standardAccessLogFile
+      ]
+
+      logAbsolutePath = logFileCandidates.find(logFile => fs.existsSync(logFile))
+      if (!logAbsolutePath) {
+        that.log('[Windows] 日志文件不存在，自动跳过。已尝试路径:')
+        logFileCandidates.forEach(logFile => that.log(`  ${logFile}`))
+        return
       }
-    }
-
-    // 模式 4: Linux 按分钟分割 (生产环境常见，路径包含 /YYYY/MM/DD/HH/mm.log)
-    if (!logAbsolutePath) {
-      let timeAt = moment().unix() - 60 // 获取一分钟前的时间戳，因为当前分钟的日志可能尚未完全写入或轮转
-      let timeMoment = moment.unix(timeAt)
-      let formatStr = timeMoment.format('/YYYY/MM/DD/HH/mm')
-      let linuxStyleLogFile = `${nginxLogFilePath}${formatStr}.log`
-
-      if (fs.existsSync(linuxStyleLogFile)) {
-        logAbsolutePath = linuxStyleLogFile
-        that.log(`[兼容模式] 检测到按分钟分割的日志，使用 Linux 模式`)
-      }
-    }
-
-    // 如果所有尝试的路径都不存在，则记录日志并退出本次执行
-    if (!logAbsolutePath || fs.existsSync(logAbsolutePath) === false) {
-      that.log(`[兼容模式] log文件不存在，自动跳过。已尝试的路径:`)
-      that.log(`  1. ${feeAccessLogFile}`)
-      that.log(`  2. ${path.join(nginxLogFilePath, 'access.log')}`)
-      that.log(`  3. ${nginxLogFilePath}YYYY/MM/DD/HH/mm.log`)
+      that.log(`[Windows] 使用日志文件 => ${logAbsolutePath}`)
+    } else {
+      that.log(`[兼容模式] 当前系统不支持 Nginx 日志读取 => ${os.platform()}`)
       return
     }
 

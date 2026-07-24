@@ -11,13 +11,13 @@
 ```text
 浏览器 / SDK
   -> Nginx:80
-      -> /dig                 写 /var/log/nginx/fee-access.log，返回 1px 图片
+      -> /dig                 写 /var/log/nginx/fee-minute/YYYY/MM/DD/HH/mm.log，返回 1px 图片
       -> /api/*               代理到 Node server:3000
       -> /project/:id/api/*   代理到 Node server:3000
       -> /                    托管 client/dist
 
 Task:Manager
-  -> SaveLog:Nginx 读取 fee-access.log
+  -> SaveLog:Nginx 每分钟读取上一个完整分钟分片
   -> 写入 server/log/kafka/raw 和 server/log/kafka/json
   -> Parse / Summary 命令入库
   -> MySQL/MariaDB 展示给 client
@@ -901,7 +901,7 @@ const testing = {
     kafka: false,
     alarm: false
   },
-  nginxLogFilePath: '/var/log/nginx/'
+  nginxLogFilePath: '/var/log/nginx/fee-minute/'
 }
 ```
 
@@ -909,7 +909,8 @@ const testing = {
 
 - `kafka: false` 表示先走 Nginx 文件日志链路。
 - `alarm: false` 表示测试环境先不发真实报警。
-- `nginxLogFilePath` 必须和 Nginx 写入 `fee-access.log` 的目录一致。
+- Linux 下 `SaveLog:Nginx` 只读取上一分钟的 `YYYY/MM/DD/HH/mm.log`。
+- `nginxLogFilePath` 必须和 Nginx 动态分钟日志的根目录一致，末尾保留 `/`。
 
 ### 8.4 检查后端端口
 
@@ -1080,11 +1081,17 @@ project_name: template
 
 - 对外提供前端静态页面：访问 `http://8.138.93.199/` 时返回 `client/dist`。
 - 代理后端接口：把 `/api/*` 和 `/project/<id>/api/*` 转发到本机 `127.0.0.1:3000`。
-- 接收 SDK 打点：把 `/dig?d=...` 请求写入 `/var/log/nginx/fee-access.log`，供 `SaveLog:Nginx` 后续读取。
+- 接收 SDK 打点：按照请求完成时间，把 `/dig?d=...` 直接写入 `/var/log/nginx/fee-minute/YYYY/MM/DD/HH/mm.log`，供 `SaveLog:Nginx` 在下一分钟读取。
 
-### 11.1 准备 Nginx 日志读取权限
+### 11.1 准备分钟日志目录和权限
 
-`SaveLog:Nginx` 会由 PM2 下的普通部署用户 `fee` 执行，它需要读取 `/var/log/nginx/fee-access.log`。推荐做法是：应用仍然用普通用户运行，只给它读取这一个日志文件所需的最小权限。
+动态 `access_log` 不会帮我们创建多级父目录。因此需要提前创建当前小时和下一小时目录：
+
+```text
+/var/log/nginx/fee-minute/YYYY/MM/DD/HH/
+```
+
+Nginx worker 需要在目录中创建分钟文件，PM2 下的普通部署用户 `fee` 需要读取这些文件。
 
 #### 11.1.1 把 `fee` 加入 `adm` 组
 
@@ -1115,47 +1122,115 @@ su - fee
 | `fee` 用户 | 普通部署用户 | 用来拉代码、安装依赖、构建项目、运行 PM2 |
 | `fee` 组 | 创建 `fee` 用户时通常自动创建的同名主组 | 主要用于 `/opt/fee-pro` 这类项目文件的普通读写权限 |
 | `sudo` 组 | 允许用户手动执行 `sudo <命令>` | 适合手动执行 `sudo systemctl reload nginx`、`sudo vim /etc/nginx/...` 等运维命令 |
-| `adm` 组 | 授予读取部分系统日志的权限 | 让 `fee` 用户以普通身份读取 `/var/log/nginx/fee-access.log` |
+| `adm` 组 | 授予读取部分系统日志的权限 | 让 `fee` 用户以普通身份读取 `/var/log/nginx/fee-minute/` 下的分钟分片 |
 
 `sudo` 组并不表示普通后台进程自动拥有 `/var/log/nginx/` 读取权限。PM2 下的 `fee-task-manager` 和 `SaveLog:Nginx` 不会自动带着 `sudo` 权限，也不会在读取文件时帮你输入 sudo 密码。因此不要为了读日志而把 Node 任务改成 `sudo node ...` 或用 root 跑。
 
-#### 11.1.2 创建日志文件并设置权限
+#### 11.1.2 确认 Nginx worker 用户
+
+执行：
 
 ```bash
-sudo touch /var/log/nginx/fee-access.log
-sudo chgrp adm /var/log/nginx/fee-access.log
-sudo chmod 640 /var/log/nginx/fee-access.log
+grep -n '^user' /etc/nginx/nginx.conf
+ps -eo user,group,comm | grep '[n]ginx'
 ```
 
-逐条说明：
+Ubuntu 通过 apt 安装的 Nginx 通常使用 `www-data`。如果输出是 `nginx` 或其他用户，后续脚本中的 `NGINX_WORKER_USER='www-data'` 要替换成实际用户。
 
-| 命令 | 含义 | 作用 |
-| --- | --- | --- |
-| `sudo touch /var/log/nginx/fee-access.log` | 创建空日志文件；如果文件已存在，则更新文件时间 | 确保后续 `chgrp`、`chmod` 和 Nginx `access_log` 指向的文件存在 |
-| `sudo chgrp adm /var/log/nginx/fee-access.log` | 把日志文件所属用户组改成 `adm` | 让已经加入 `adm` 组的 `fee` 用户具备按组读取该文件的条件 |
-| `sudo chmod 640 /var/log/nginx/fee-access.log` | 把文件权限设置为 `rw-r-----` | 文件所有者可读写，`adm` 组可读，其他用户无权限 |
+#### 11.1.3 创建目录准备脚本
 
-`640` 的含义：
-
-| 数字 | 对象 | 权限 | 含义 |
-| --- | --- | --- | --- |
-| `6` | 文件所有者 | `rw-` | 可以读、写 |
-| `4` | 所属用户组 | `r--` | 可以读，不能写 |
-| `0` | 其他用户 | `---` | 不能读、不能写、不能执行 |
-
-如果你的部署用户不是 `fee`，把命令中的 `fee` 替换为实际用户。
-
-#### 11.1.3 检查权限
+先创建专用日志根目录：
 
 ```bash
-ls -l /var/log/nginx/fee-access.log
+sudo install -d -o www-data -g adm -m 2750 /var/log/nginx/fee-minute
+```
+
+然后创建 `/usr/local/sbin/fee-prepare-nginx-log-dirs.sh`：
+
+```bash
+sudo tee /usr/local/sbin/fee-prepare-nginx-log-dirs.sh > /dev/null <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+NGINX_WORKER_USER='www-data'
+LOG_GROUP='adm'
+
+for hour_offset in 0 1; do
+  log_dir=$(date -d "+${hour_offset} hour" '+/var/log/nginx/fee-minute/%Y/%m/%d/%H')
+  install -d -o "$NGINX_WORKER_USER" -g "$LOG_GROUP" -m 2750 "$log_dir"
+done
+EOF
+
+sudo chmod 750 /usr/local/sbin/fee-prepare-nginx-log-dirs.sh
+sudo /usr/local/sbin/fee-prepare-nginx-log-dirs.sh
+```
+
+脚本每次创建：
+
+- 当前小时目录；
+- 下一小时目录，避免整点切换后 Nginx 因目录不存在而无法写日志。
+
+目录权限 `2750` 中的首位 `2` 是 setgid。Nginx 创建的分钟文件会继承目录的 `adm` 组，`fee` 用户可通过 `adm` 组读取。
+
+#### 11.1.4 配置 systemd 定时准备目录
+
+创建 service：
+
+```bash
+sudo tee /etc/systemd/system/fee-log-dir-prepare.service > /dev/null <<'EOF'
+[Unit]
+Description=Prepare fee Nginx minute log directories
+Before=nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fee-prepare-nginx-log-dirs.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+创建 timer：
+
+```bash
+sudo tee /etc/systemd/system/fee-log-dir-prepare.timer > /dev/null <<'EOF'
+[Unit]
+Description=Prepare fee Nginx minute log directories periodically
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+```
+
+启用并检查：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now fee-log-dir-prepare.service
+sudo systemctl enable --now fee-log-dir-prepare.timer
+
+CURRENT_LOG_DIR=$(date '+/var/log/nginx/fee-minute/%Y/%m/%d/%H')
+NEXT_LOG_DIR=$(date -d '+1 hour' '+/var/log/nginx/fee-minute/%Y/%m/%d/%H')
+
+ls -ld /var/log/nginx/fee-minute "$CURRENT_LOG_DIR" "$NEXT_LOG_DIR"
 groups fee
+sudo -u www-data test -w "$CURRENT_LOG_DIR" && echo 'nginx directory writable'
+sudo -u fee test -x "$CURRENT_LOG_DIR" && echo 'fee directory readable'
 ```
 
-预期结果：
+预期：
 
-- `fee-access.log` 的所属组是 `adm`。
-- `groups fee` 的输出中包含 `adm`。
+- 三个目录的所有者是 `www-data`，所属组是 `adm`，权限包含 setgid；
+- `groups fee` 包含 `adm`；
+- 最后两条检查分别输出 `nginx directory writable` 和 `fee directory readable`。
+
+如果实际 Nginx worker 用户不是 `www-data`，同步替换以上命令和脚本中的用户名。如果 `fee` 的组权限尚未被 PM2 进程继承，稍后重启 `fee-task-manager` 即可。
 
 ### 11.2 写入 Nginx 站点配置
 
@@ -1171,6 +1246,11 @@ ls -l /opt/fee-pro/client/dist/index.html
 
 ```bash
 sudo tee /etc/nginx/conf.d/fee-pro.conf > /dev/null <<'NGINX'
+map $time_iso8601 $fee_minute_log {
+    ~^(?<fee_year>\d{4})-(?<fee_month>\d{2})-(?<fee_day>\d{2})T(?<fee_hour>\d{2}):(?<fee_minute>\d{2}) /var/log/nginx/fee-minute/$fee_year/$fee_month/$fee_day/$fee_hour/$fee_minute.log;
+    default /var/log/nginx/fee-minute/fallback.log;
+}
+
 log_format fee_main '$time_iso8601\t-\t-\t$remote_addr\t$http_host\t$status\t$request_time\t$request_length\t$body_bytes_sent\t15d04347-be16-b9ab-0029-24e4b6645950\t-\t-\t9689c3ea-5155-2df7-a719-e90d2dedeb2c\t937ba755-116a-18e6-0735-312cba23b00c\t$request_method $server_protocol\t$request_uri\t-\t$http_user_agent\t-\tsample=-&_UC_agent=-&test_device_id=-&-\t-\t-\t-';
 
 server {
@@ -1186,7 +1266,7 @@ server {
 
     location = /dig {
         empty_gif;
-        access_log /var/log/nginx/fee-access.log fee_main;
+        access_log $fee_minute_log fee_main;
 
         add_header Access-Control-Allow-Origin * always;
         add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
@@ -1264,7 +1344,24 @@ NGINX
 
 ### 11.4 Nginx 配置内容说明
 
-#### 11.4.1 `log_format fee_main`
+#### 11.4.1 动态分钟路径和 `log_format fee_main`
+
+`map` 从 `$time_iso8601` 中提取年月日时分，生成完整日志路径：
+
+```nginx
+map $time_iso8601 $fee_minute_log {
+    ~^(?<fee_year>\d{4})-(?<fee_month>\d{2})-(?<fee_day>\d{2})T(?<fee_hour>\d{2}):(?<fee_minute>\d{2}) /var/log/nginx/fee-minute/$fee_year/$fee_month/$fee_day/$fee_hour/$fee_minute.log;
+    default /var/log/nginx/fee-minute/fallback.log;
+}
+```
+
+例如 Nginx 在 `2026-07-23 10:30` 完成的 `/dig` 请求会写入：
+
+```text
+/var/log/nginx/fee-minute/2026/07/23/10/30.log
+```
+
+动态日志路径不会自动创建父目录，所以前面的 `fee-log-dir-prepare.timer` 必须保持运行。
 
 ```nginx
 log_format fee_main '...';
@@ -1273,10 +1370,12 @@ log_format fee_main '...';
 这行定义了名为 `fee_main` 的 Nginx 日志格式。`/dig` 打点入口会使用它写入 SDK 上报日志：
 
 ```nginx
-access_log /var/log/nginx/fee-access.log fee_main;
+access_log $fee_minute_log fee_main;
 ```
 
 这个格式使用 `\t` 作为字段分隔符。服务端 `SaveLog:Nginx` 读取日志时会按 Tab 切割字段，并从固定位置取出请求地址、User-Agent 和 IP 等信息，所以不要随意调整字段顺序。尤其是 `$request_uri` 很关键，SDK 上报数据在 `/dig?d=...` 的 `d` 参数里。
+
+Linux 下 `SaveLog:Nginx` 每分钟只读取上一个完整分钟的文件，不会回退读取 `fee-access.log`。
 
 #### 11.4.2 `server` 和 `location`
 
@@ -1287,7 +1386,7 @@ access_log /var/log/nginx/fee-access.log fee_main;
 | `root /opt/fee-pro/client/dist` | 指向 Vue 前端生产构建目录 |
 | `access_log /var/log/nginx/fee-web-access.log` | 记录普通网页访问日志 |
 | `error_log /var/log/nginx/fee-error.log` | 记录 Nginx 错误日志 |
-| `location = /dig` | SDK 打点入口，返回 1px 空 GIF，并把请求写入 `fee-access.log` |
+| `location = /dig` | SDK 打点入口，返回 1px 空 GIF，并按请求时间写入动态分钟分片 |
 | `location ^~ /api/` | 把后台管理接口转发到后端 `127.0.0.1:3000` |
 | `location ~ ^/project/\d+/api/` | 把项目维度接口转发到后端 `127.0.0.1:3000` |
 | `location ~* \.(...)$` | 静态资源缓存规则 |
@@ -1468,27 +1567,81 @@ http://8.138.93.199/
 
 如果 `/api/*` 正常但 `/project/1/api/*` 返回 HTML，通常是 Nginx 缺少 `/project/\d+/api/` 代理。
 
+### 13.1 已按旧版单文件配置完成本章时的迁移步骤
+
+如果此前按照旧版文档，把 `/dig` 配成写入 `/var/log/nginx/fee-access.log`，并且已经完成登录验证，不需要重装数据库、Redis、依赖或重新初始化项目。只迁移日志链路即可。
+
+先暂停任务进程，避免迁移期间自动读取或手工验证互相干扰。`fee-app` 不需要停止，管理后台仍可访问：
+
+```bash
+pm2 stop fee-task-manager
+pm2 list
+```
+
+然后依次完成：
+
+1. 把包含最新 `server/src/commands/save_log/parseNginxLog.js` 的代码同步到 ECS。
+2. 按 `8.3` 把 `testing.nginxLogFilePath` 改为 `/var/log/nginx/fee-minute/`。
+3. 按 `11.1.2` 到 `11.1.4` 创建分钟目录准备脚本、service 和 timer。
+4. 用 `11.2` 的最新内容覆盖 `/etc/nginx/conf.d/fee-pro.conf`。
+5. 重新构建 Server：
+
+   ```bash
+   cd /opt/fee-pro/server
+   npm run build
+   ```
+
+6. 检查并重载 Nginx：
+
+   ```bash
+   sudo nginx -t
+   sudo systemctl reload nginx
+   sudo systemctl status fee-log-dir-prepare.timer --no-pager
+   ```
+
+旧的 `/var/log/nginx/fee-access.log` 可以暂时保留作为迁移前记录。新配置生效后，新的 `/dig` 请求不再写入它。确认第十四章全部跑通后，再单独归档或删除旧文件。
+
+此时先不要恢复 `fee-task-manager`，继续执行第十四章的手工链路验证；第 `14.5` 小节会恢复任务进程。
+
 ## 十四、验证 SDK 打点链路
 
 ### 14.1 先验证 `/dig` 能写入 Nginx 日志
 
-在 ECS 上执行：
+如果 `fee-task-manager` 仍在运行，先暂停它，避免自动任务提前消费测试分片：
 
 ```bash
+pm2 stop fee-task-manager
+```
+
+然后在同一个 SSH 终端执行：
+
+```bash
+TEST_MINUTE=$(date '+%Y/%m/%d/%H/%M')
+TEST_LOG_FILE="/var/log/nginx/fee-minute/${TEST_MINUTE}.log"
+
 D=$(node -e "const log={type:'error',code:8,detail:{error_no:'ECS_DEPLOY_TEST',url:'http://8.138.93.199/deploy-test',http_code:0,during_ms:0,request_size_b:0,response_size_b:0},extra:{desc:'manual deploy test'},common:{pid:'template',uuid:'deploy-test-uuid',ucid:'deploy-user',timestamp:Date.now(),version:'1.0.0'}};process.stdout.write(encodeURIComponent(JSON.stringify(log)))")
 curl -I "http://127.0.0.1/dig?d=${D}"
-sudo tail -n 1 /var/log/nginx/fee-access.log
+echo "$TEST_LOG_FILE"
+sudo tail -n 1 "$TEST_LOG_FILE"
+sudo -u fee test -r "$TEST_LOG_FILE" && echo 'fee log readable'
 ```
 
 预期：
 
 - `curl` 返回 `HTTP/1.1 200 OK`。
-- `/var/log/nginx/fee-access.log` 新增一行。
+- 当前分钟对应的 `YYYY/MM/DD/HH/mm.log` 新增一行。
 - 日志行中包含 `/dig?d=...`。
+- 最后一条检查输出 `fee log readable`。
+
+如果命令刚好跨越分钟边界，`TEST_LOG_FILE` 可能指向请求前一分钟。重新执行本小节即可。
 
 ### 14.2 手动执行保存日志命令
 
+`SaveLog:Nginx` 只读取上一分钟的完整分片。因此保持在完成 `14.1` 的同一个 SSH 终端中，等待 `TEST_MINUTE` 结束后再执行：
+
 ```bash
+while [ "$(date '+%Y/%m/%d/%H/%M')" = "$TEST_MINUTE" ]; do sleep 1; done
+
 cd /opt/fee-pro/server
 npm run test_fee -- SaveLog:Nginx
 find log/kafka -type f | sort | tail -20
@@ -1503,8 +1656,10 @@ log/kafka/json/month_202607/day_16/...
 
 如果没有文件，重点检查：
 
-- `server/src/configs/common.js` 中 `testing.nginxLogFilePath` 是否是 `/var/log/nginx/`。
-- `fee` 用户是否能读 `/var/log/nginx/fee-access.log`。
+- `server/src/configs/common.js` 中 `testing.nginxLogFilePath` 是否是 `/var/log/nginx/fee-minute/`。
+- 上一分钟的 `/var/log/nginx/fee-minute/YYYY/MM/DD/HH/mm.log` 是否存在。
+- `fee` 用户是否能读取该分钟文件。
+- `fee-log-dir-prepare.timer` 是否为 `active`。
 - Nginx 日志格式是否是本文的 `fee_main`。
 
 ### 14.3 手动解析最近 5 分钟日志
@@ -1541,6 +1696,22 @@ mysql -h 127.0.0.1 -u fee_test -p platform_test -e "SELECT error_name,url_path,e
 ```
 
 如果手动命令能跑通，`fee-task-manager` 正常运行后会按分钟自动调度这些命令。
+
+### 14.5 恢复自动任务
+
+完成 `14.1` 到 `14.4` 后恢复任务进程：
+
+```bash
+cd /opt/fee-pro/server
+pm2 restart fee-task-manager --update-env
+pm2 save
+pm2 list
+pm2 logs fee-task-manager --lines 80
+```
+
+预期 `fee-task-manager` 为 `online`。后续每分钟会自动读取上一分钟的 Nginx 分片。
+
+`pm2 logs` 会持续跟踪输出；确认没有报错后按 `Ctrl+C` 退出日志查看，不会停止 PM2 中的进程。
 
 ## 十五、业务页面接入 SDK 的注意事项
 
@@ -1630,9 +1801,14 @@ pm2 logs fee-task-manager --lines 100
 
 tail -f /opt/fee-pro/server/log/pm2/app/app-out.log
 tail -f /opt/fee-pro/server/log/pm2/command/task-manager-out.log
-sudo tail -f /var/log/nginx/fee-access.log
+
+CURRENT_FEE_LOG=$(date '+/var/log/nginx/fee-minute/%Y/%m/%d/%H/%M.log')
+sudo tail -f "$CURRENT_FEE_LOG"
+
 sudo tail -f /var/log/nginx/fee-error.log
 ```
+
+分钟切换后会生成新文件，原来的 `tail -f` 不会自动跳到新路径，需要重新执行 `CURRENT_FEE_LOG=...` 和 `tail -f`。
 
 ### 16.3 重启服务
 
@@ -1686,11 +1862,13 @@ mysql -h 127.0.0.1 -u fee_test -p platform_test < project_2.clean.sql
 
 ### 17.1 Nginx 日志轮转
 
+动态分钟日志是已经完成的独立文件，不再交给 logrotate 重命名。logrotate 这里只处理普通网页访问日志和错误日志。
+
 创建：
 
 ```bash
 sudo tee /etc/logrotate.d/fee-pro-nginx > /dev/null <<'EOF'
-/var/log/nginx/fee-access.log /var/log/nginx/fee-web-access.log /var/log/nginx/fee-error.log {
+/var/log/nginx/fee-web-access.log /var/log/nginx/fee-error.log {
     daily
     rotate 14
     compress
@@ -1711,7 +1889,71 @@ EOF
 sudo logrotate -d /etc/logrotate.d/fee-pro-nginx
 ```
 
-### 17.2 PM2 日志轮转
+### 17.2 清理旧的分钟日志
+
+分钟日志不需要再次轮转，但必须定期删除，避免长期占满磁盘。创建清理脚本：
+
+```bash
+sudo tee /usr/local/sbin/fee-clean-nginx-minute-logs.sh > /dev/null <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+LOG_ROOT='/var/log/nginx/fee-minute'
+
+if [[ ! -d "$LOG_ROOT" ]]; then
+  exit 0
+fi
+
+find "$LOG_ROOT" -type f -name '*.log' -mtime +14 -delete
+find "$LOG_ROOT" -depth -mindepth 1 -type d -empty -delete
+
+# 清理空目录后，立即恢复 Nginx 当前小时和下一小时所需目录。
+/usr/local/sbin/fee-prepare-nginx-log-dirs.sh
+EOF
+
+sudo chmod 750 /usr/local/sbin/fee-clean-nginx-minute-logs.sh
+```
+
+创建每日清理 service：
+
+```bash
+sudo tee /etc/systemd/system/fee-nginx-minute-log-clean.service > /dev/null <<'EOF'
+[Unit]
+Description=Clean old fee Nginx minute logs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fee-clean-nginx-minute-logs.sh
+EOF
+```
+
+创建 timer：
+
+```bash
+sudo tee /etc/systemd/system/fee-nginx-minute-log-clean.timer > /dev/null <<'EOF'
+[Unit]
+Description=Clean old fee Nginx minute logs daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+```
+
+启用并检查：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now fee-nginx-minute-log-clean.timer
+sudo systemctl list-timers --all | grep fee-
+```
+
+这里仅删除 `/var/log/nginx/fee-minute/` 专用目录下超过 14 天的 `.log` 文件，不会影响普通 Nginx 日志。
+
+### 17.3 PM2 日志轮转
 
 可以安装 PM2 日志轮转插件：
 
@@ -1838,16 +2080,22 @@ location ~ ^/project/\d+/api/ {
 按顺序排查：
 
 ```bash
-sudo tail -n 3 /var/log/nginx/fee-access.log
+PREVIOUS_LOG=$(date -d '1 minute ago' '+/var/log/nginx/fee-minute/%Y/%m/%d/%H/%M.log')
+echo "$PREVIOUS_LOG"
+sudo ls -l "$PREVIOUS_LOG"
+sudo tail -n 3 "$PREVIOUS_LOG"
+
 cd /opt/fee-pro/server
 npm run test_fee -- SaveLog:Nginx
 find log/kafka -type f | sort | tail -20
 ```
 
-如果 `fee-access.log` 有数据但 `log/kafka/json` 没有数据：
+如果上一分钟分片有数据但 `log/kafka/json` 没有数据：
 
-- 检查 `testing.nginxLogFilePath` 是否是 `/var/log/nginx/`。
-- 检查 `fee` 用户是否能读 `/var/log/nginx/fee-access.log`。
+- 检查 `testing.nginxLogFilePath` 是否是 `/var/log/nginx/fee-minute/`。
+- 检查 `fee-log-dir-prepare.timer` 是否运行。
+- 检查目录所有者是否是 Nginx worker、所属组是否是 `adm`。
+- 检查 `fee` 用户是否能读取上一分钟分片。
 - 检查日志是否使用本文的 `fee_main` Tab 分隔格式。
 
 如果 `log/kafka/json` 有数据但数据库没有数据：
@@ -1889,7 +2137,7 @@ scp fee-pro-src.tar.gz fee@8.138.93.199:/opt/
 - `http://8.138.93.199/` 能打开管理后台。
 - `test@qq.com/admin` 能登录。
 - `/api/*` 和 `/project/1/api/*` 由 Nginx 正确代理到后端。
-- `/dig` 能写入 `/var/log/nginx/fee-access.log`。
+- `/dig` 能写入 `/var/log/nginx/fee-minute/YYYY/MM/DD/HH/mm.log`。
 - `SaveLog:Nginx` 能生成 `server/log/kafka/json` 文件。
 - `Parse:Monitor` 能把手工打点写入 `t_o_monitor_1_YYYYMM`。
 - `fee-app` 和 `fee-task-manager` 在 PM2 中稳定运行。

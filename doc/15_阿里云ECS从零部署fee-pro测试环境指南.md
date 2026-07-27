@@ -1185,7 +1185,37 @@ Ubuntu 通过 apt 安装的 Nginx 通常使用 `www-data`。如果实际 worker 
 grep -nE '^[[:space:]]*user[[:space:]]' /etc/nginx/nginx.conf
 ```
 
-#### 11.1.3 创建目录准备脚本
+#### 11.1.3 创建目录准备脚本（定义“做什么”）
+
+Nginx 可以根据请求时间生成 `YYYY/MM/DD/HH/mm.log` 文件名，但不会自动创建路径中的多级父目录。小时、日期发生变化后，如果对应的 `YYYY/MM/DD/HH/` 目录不存在，Nginx 就无法写入新的分钟日志。
+
+因此，本节先创建一个可重复执行的目录准备脚本，负责：
+
+- 创建当前小时目录；
+- 提前创建下一小时目录，避免整点切换时目录不存在；
+- 把目录所有者设为 Nginx worker 用户；
+- 把所属组设为 `adm`，让 `fee` 用户能够读取日志。
+
+本节和下一节不是一条连续的 Shell 命令，而是三个互相关联的组件：
+
+| 组件 | 定义的内容 | 能否单独使用 | 依赖关系 |
+| --- | --- | --- | --- |
+| `fee-prepare-nginx-log-dirs.sh` | 具体创建哪些目录、设置什么权限 | 可以手工执行 | 不依赖 systemd |
+| `fee-log-dir-prepare.service` | systemd 应当执行哪个脚本 | 可以手工触发 | 依赖上面的脚本存在且可执行 |
+| `fee-log-dir-prepare.timer` | 什么时候触发 service | 不能独立完成目录创建 | 依赖同名 service |
+
+它们组合后的调用关系是：
+
+```text
+fee-log-dir-prepare.timer
+        每隔 5 分钟触发
+                ↓
+fee-log-dir-prepare.service
+        以 root 权限执行
+                ↓
+fee-prepare-nginx-log-dirs.sh
+        创建当前小时和下一小时目录
+```
 
 先创建专用日志根目录：
 
@@ -1213,14 +1243,29 @@ sudo chmod 750 /usr/local/sbin/fee-prepare-nginx-log-dirs.sh
 sudo /usr/local/sbin/fee-prepare-nginx-log-dirs.sh
 ```
 
-脚本每次创建：
+上面代码块包含三个依次执行的操作：
 
-- 当前小时目录；
-- 下一小时目录，避免整点切换后 Nginx 因目录不存在而无法写日志。
+1. `sudo tee ... <<'EOF'` 到单独一行的 `EOF`：创建或覆盖脚本文件；
+2. `sudo chmod 750 ...`：赋予脚本所有者执行权限；
+3. `sudo /usr/local/sbin/fee-prepare-nginx-log-dirs.sh`：立即手工执行一次，不等待 systemd 定时器。
+
+例如当前时间是 `2026-07-27 14:30`，脚本会创建或检查：
+
+```text
+/var/log/nginx/fee-minute/2026/07/27/14
+/var/log/nginx/fee-minute/2026/07/27/15
+```
 
 目录权限 `2750` 中的首位 `2` 是 setgid。Nginx 创建的分钟文件会继承目录的 `adm` 组，`fee` 用户可通过 `adm` 组读取。
 
-#### 11.1.4 配置 systemd 定时准备目录
+脚本可以重复运行，已存在的目标目录不会被重复创建，但其所有者、所属组和权限会重新确保为脚本指定的值。只运行本节可以解决当前和下一小时的目录问题，但不能覆盖更久之后的新小时，因此还需要下一节的自动调度。
+
+#### 11.1.4 配置 systemd 自动准备目录（定义“如何、何时执行”）
+
+本节不会重新实现目录创建逻辑，而是让 systemd 自动调用 `11.1.3` 创建的脚本。它包含 service 和 timer 两层：
+
+- service 负责“如何执行”，即以一次性系统任务运行脚本；
+- timer 负责“何时执行”，即启动后和运行期间定时触发 service。
 
 创建 service：
 
@@ -1239,6 +1284,15 @@ WantedBy=multi-user.target
 EOF
 ```
 
+service 中的关键配置：
+
+| 配置 | 含义 |
+| --- | --- |
+| `Type=oneshot` | 脚本执行完毕后任务即结束，不需要常驻后台 |
+| `ExecStart=...` | 指向 `11.1.3` 创建的目录准备脚本 |
+| `Before=nginx.service` | 开机启动时优先准备目录，再启动 Nginx |
+| `WantedBy=multi-user.target` | 允许将该 service 加入系统正常启动流程 |
+
 创建 timer：
 
 ```bash
@@ -1249,12 +1303,21 @@ Description=Prepare fee Nginx minute log directories periodically
 [Timer]
 OnBootSec=10s
 OnUnitActiveSec=5min
-Persistent=true
 
 [Install]
 WantedBy=timers.target
 EOF
 ```
+
+timer 中的关键配置：
+
+| 配置 | 含义 |
+| --- | --- |
+| `OnBootSec=10s` | 系统启动约 10 秒后触发一次 |
+| `OnUnitActiveSec=5min` | 此后约每 5 分钟再次触发 |
+| `WantedBy=timers.target` | 允许 timer 随 systemd 定时器系统启动 |
+
+timer 默认触发与它同名的 `fee-log-dir-prepare.service`，service 再执行脚本。timer 自己不创建目录。
 
 启用并检查：
 
@@ -1272,11 +1335,27 @@ sudo -u www-data test -w "$CURRENT_LOG_DIR" && echo 'nginx directory writable'
 sudo -u fee test -x "$CURRENT_LOG_DIR" && echo 'fee directory readable'
 ```
 
+这些命令也需要按顺序执行：
+
+1. `daemon-reload`：让 systemd 重新读取刚创建的 service 和 timer；
+2. 第一条 `enable --now`：加入开机启动，并立即执行一次 service；
+3. 第二条 `enable --now`：加入开机启动，并立即启动 timer；
+4. 后续命令：检查当前、下一小时目录及相关用户权限。
+
 预期：
 
 - 三个目录的所有者是 `www-data`，所属组是 `adm`，权限包含 setgid；
 - `groups fee` 包含 `adm`；
 - 最后两条检查分别输出 `nginx directory writable` 和 `fee directory readable`。
+- `fee-log-dir-prepare.timer` 应保持 `active (waiting)`。
+
+由于 service 使用 `Type=oneshot`，脚本成功执行后，`fee-log-dir-prepare.service` 可能显示为 `inactive (dead)`，这是一次性任务执行完成后的正常状态，不代表失败。可以用下面的命令查看最近一次执行结果：
+
+```bash
+sudo systemctl status fee-log-dir-prepare.service --no-pager
+sudo journalctl -u fee-log-dir-prepare.service -n 30 --no-pager
+sudo systemctl status fee-log-dir-prepare.timer --no-pager
+```
 
 如果实际 Nginx worker 用户不是 `www-data`，同步替换以上命令和脚本中的用户名。如果 `fee` 的组权限尚未被 PM2 进程继承，稍后重启 `fee-task-manager` 即可。
 

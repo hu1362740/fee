@@ -16,7 +16,7 @@ Nginx 是一个高性能 Web 服务器，也常被用作反向代理、静态资
 在本项目里，Nginx 主要承担三类职责：
 
 1. **接收 SDK 打点请求**
-   - SDK 默认把打点发到 `http://test.com/dig`。
+   - 业务方通过 `dt.set({ reportUrl })` 指定打点地址；本文本地示例使用 `http://test.com/dig`。
    - Nginx 的 `location = /dig` 返回一个 1px 图片，同时把完整请求写入 `fee-access.log`。
    - Server 侧的 `SaveLog:Nginx` 再读取 `fee-access.log`，解析里面的 `?d=...` 打点 JSON。
 
@@ -338,7 +338,7 @@ server {
 | 配置 | 作用 | 当前评价 |
 | --- | --- | --- |
 | `listen 80;` | 监听 80 端口。 | 合理。 |
-| `server_name test.com;` | Host 为 `test.com` 的请求进入 fee-pro。 | 和 SDK 默认 `http://test.com/dig` 对得上，但本机 hosts 必须配置 `127.0.0.1 test.com`。 |
+| `server_name test.com;` | Host 为 `test.com` 的请求进入 fee-pro。 | 当业务方把 `reportUrl` 配成 `http://test.com/dig` 时可以使用，但本机 hosts 必须配置 `127.0.0.1 test.com`。 |
 | `charset utf-8;` | 设置响应字符集。 | 合理。 |
 | `root D:/mywork/demo/fee-pro/nginx_html;` | server 级默认静态根目录。 | 当前该目录不存在，错误页等 fallback 会有问题。 |
 
@@ -574,9 +574,9 @@ location ~ /\.env {
    - 第 17 列是 `$http_user_agent`。
    - 第 3 列是 `$remote_addr`。
 
-5. **`server_name test.com` 与 SDK 默认地址一致**
-   - SDK 中默认 `feeTarget = 'http://test.com/dig'`。
-   - 只要 hosts 配好，SDK 打点能进这个 server。
+5. **`server_name test.com` 可用于本地 SDK 联调**
+   - 业务方把 `reportUrl` 显式配置为 `http://test.com/dig`。
+   - 只要 hosts 配好，SDK 打点就能进入这个 server。
 
 ### 需要修正或注意的问题
 
@@ -727,7 +727,7 @@ npm run dev
 
 ### 1. 检查 hosts
 
-SDK 默认打到 `http://test.com/dig`，所以 Windows hosts 需要有：
+如果业务页面把 `reportUrl` 配成 `http://test.com/dig`，Windows hosts 需要有：
 
 ```text
 127.0.0.1 test.com

@@ -98,8 +98,10 @@ const log = (type = '', code, detail = {}, extra = {}) => {
     }
   }
   // 图片打点
+  const reportUrl = _.get(transportConfig, ['reportUrl']).trim()
+  const querySeparator = reportUrl.indexOf('?') === -1 ? '?' : '&'
   const img = new window.Image()
-  img.src = `${feeTarget}?d=${encodeURIComponent(JSON.stringify(logInfo))}`
+  img.src = `${reportUrl}${querySeparator}d=${encodeURIComponent(JSON.stringify(logInfo))}`
 }
 ```
 
@@ -107,19 +109,30 @@ const log = (type = '', code, detail = {}, extra = {}) => {
 - 首先验证日志数据的有效性
 - 调用 `getPageType` 函数获取页面类型
 - 构建日志信息对象，包含类型、代码、详细数据、附加信息和公共信息
-- 使用图片打点的方式上报数据，通过 `feeTarget` 配置的地址
+- 使用图片打点的方式上报数据，地址由业务方通过 `dt.set({ reportUrl })` 配置
+- `reportUrl` 保存在独立的传输配置中，不会写入日志的 `common` 字段
 
 #### 1.2.3 配置设置函数
 
 ```javascript
 log.set = (customerConfig = {}, isOverwrite = false) => {
-  // 覆盖模式
+  const commonCustomerConfig = { ...customerConfig }
+  const hasReportUrl = _.has(commonCustomerConfig, ['reportUrl'])
+  const customerReportUrl = _.get(commonCustomerConfig, ['reportUrl'])
+  delete commonCustomerConfig.reportUrl
+
   if (isOverwrite) {
-    commonConfig = { ...customerConfig }
+    commonConfig = { ...commonCustomerConfig }
+    transportConfig = _.clone(DEFAULT_TRANSPORT_CONFIG)
   } else {
     // lodash内置函数, 相当于递归版assign
-    commonConfig = _.merge(commonConfig, customerConfig)
+    commonConfig = _.merge(commonConfig, commonCustomerConfig)
   }
+
+  if (hasReportUrl) {
+    transportConfig.reportUrl = customerReportUrl
+  }
+
   // 检测是否为测试数据
   const isTestFlagOn = _.get(
     commonConfig,
@@ -161,6 +174,7 @@ log.set = (customerConfig = {}, isOverwrite = false) => {
 
 **分析：**
 - 支持两种配置模式：覆盖模式和合并模式
+- `reportUrl` 单独保存到 `transportConfig`，覆盖模式下未重新传入时会恢复为空
 - 兼容旧的配置项（如 `test`）
 - 检测配置的有效性，包括 uuid、ucid、函数类型等
 - 在测试模式下添加测试标记

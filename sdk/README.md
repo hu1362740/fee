@@ -9,6 +9,7 @@ import dt from 'sdk';
 // 初始化配置
 dt.set({
   pid: 'project_id', // [必填]项目id, 由灯塔项目组统一分配
+  reportUrl: 'https://fee.example.com/dig', // [必填]打点服务器或 Nginx /dig 地址
   uuid: '', // [可选]设备唯一id, 用于计算uv数&设备分布. 一般在cookie中可以取到, 没有uuid可用设备mac/idfa/imei替代. 或者在storage的key中存入随机数字, 模拟设备唯一id.
   ucid: '', // [可选]用户ucid, 用于发生异常时追踪用户信息, 一般在cookie中可以取到, 没有可传空字符串
 
@@ -64,6 +65,7 @@ script标签引入 =>
 <script>
   window.dt && dt.set({
     pid: 'project_id', // [必填]项目id, 由灯塔项目组统一分配
+    reportUrl: 'https://fee.example.com/dig', // [必填]打点服务器或 Nginx /dig 地址
     uuid: '', // [可选]设备唯一id, 用于计算uv数&设备分布. 一般在cookie中可以取到, 没有uuid可用设备mac/idfa/imei替代. 或者在storage的key中存入随机数字, 模拟设备唯一id.
     ucid: '', // [可选]用户ucid, 用于发生异常时追踪用户信息, 一般在cookie中可以取到, 没有可传空字符串
 

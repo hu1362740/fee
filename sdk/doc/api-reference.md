@@ -36,12 +36,14 @@ dt('error', 7, {
 **参数说明：**
 - `config`：配置对象
 - `isOverwrite`：是否覆盖模式，默认为 false（合并模式）
+- 覆盖模式会同时重置旧的传输配置，因此新的 `config` 仍需包含 `reportUrl`
 
 **配置选项：**
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | pid | String | '' | [必填]项目id, 由灯塔项目组统一分配 |
+| reportUrl | String | '' | [必填]打点服务器或 Nginx `/dig` 地址；仅用于传输，不写入 `common` |
 | uuid | String | '' | [可选]设备唯一id, 用于计算uv数&设备分布 |
 | ucid | String | '' | [可选]用户ucid, 用于发生异常时追踪用户信息 |
 | is_test | Boolean | false | 是否为测试数据 |
@@ -76,6 +78,7 @@ dt('error', 7, {
 ```javascript
 dt.set({
   pid: 'your-project-id',
+  reportUrl: 'https://fee.example.com/dig',
   uuid: 'user-device-id',
   ucid: 'user-id',
   record: {
@@ -288,7 +291,10 @@ safeFunction(function() {
 SDK 会在全局对象 `window` 上注册 `dt` 对象，可直接使用：
 
 ```javascript
-window.dt.set({ pid: 'your-project-id' })
+window.dt.set({
+  pid: 'your-project-id',
+  reportUrl: 'https://fee.example.com/dig'
+})
 window.dt.notify('错误类型', '错误页面URL')
 ```
 
@@ -357,6 +363,7 @@ const ucid = getCookie('ucid') || ''
 // 初始化配置
 dt.set({
   pid: 'your-project-id',
+  reportUrl: window.__APP_CONFIG__.FEE_REPORT_URL,
   uuid: uuid,
   ucid: ucid,
   record: {

@@ -9,14 +9,15 @@
 SDK 以 **1px 图片 GET 请求** 方式发送打点数据，具体方式：
 
 ```js
+const querySeparator = reportUrl.indexOf('?') === -1 ? '?' : '&'
 const img = new window.Image()
-img.src = `${feeTarget}?d=${encodeURIComponent(JSON.stringify(logInfo))}`
+img.src = `${reportUrl}${querySeparator}d=${encodeURIComponent(JSON.stringify(logInfo))}`
 ```
 
-- `feeTarget`：打点服务器地址，默认 `http://test.com/dig`（需要业务方修改为实际 Nginx 地址）
+- `reportUrl`：业务方通过 `dt.set()` 传入的打点服务器或 Nginx `/dig` 地址；该字段必填且不会写入上报数据
 - 数据通过 URL Query 参数 `d` 传递，JSON 格式后 URL 编码
 
-**优点：** 跨域无限制，兼容性好，不阻塞主线程。
+**优点：** 不需要读取响应，通常不会触发 CORS 预检，兼容性好且不阻塞主线程。业务页面仍需允许该地址通过 CSP `img-src`，HTTPS 页面也应使用 HTTPS 上报地址。
 
 ---
 
@@ -91,6 +92,7 @@ img.src = `${feeTarget}?d=${encodeURIComponent(JSON.stringify(logInfo))}`
 ```js
 window.dt.set({
   pid: 'your_project_id',    // [必填] 项目 ID，与后台 t_o_project.project_name 对应
+  reportUrl: 'https://fee.example.com/dig', // [必填] SDK 上报地址
   uuid: 'device_uuid',       // [建议填] 设备唯一 ID，用于 UV 统计
   ucid: 'user_ucid',         // [建议填] 用户 ID，用于新增用户统计
   is_test: false,             // 测试模式：true 时打点数据不录入系统

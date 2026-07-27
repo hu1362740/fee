@@ -126,8 +126,10 @@ const DEFAULT_CONFIG = {
 
 ```javascript
 // 图片打点实现
+const reportUrl = transportConfig.reportUrl
+const querySeparator = reportUrl.indexOf('?') === -1 ? '?' : '&'
 const img = new window.Image()
-img.src = `${feeTarget}?d=${encodeURIComponent(JSON.stringify(logInfo))}`
+img.src = `${reportUrl}${querySeparator}d=${encodeURIComponent(JSON.stringify(logInfo))}`
 ```
 
 ## 4. 核心功能详解
@@ -168,6 +170,7 @@ import dt from 'fee-sdk'
 // 初始化配置
 dt.set({
   pid: 'your-project-id',
+  reportUrl: 'https://fee.example.com/dig',
   uuid: 'user-device-id',
   ucid: 'user-id'
 })
@@ -191,6 +194,7 @@ dt.product(10001, { duration_ms: 5000 })
 ```javascript
 dt.set({
   pid: 'your-project-id',
+  reportUrl: window.__APP_CONFIG__.FEE_REPORT_URL,
   uuid: 'user-device-id',
   ucid: 'user-id',
   is_test: false,

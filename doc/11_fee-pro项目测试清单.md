@@ -97,8 +97,9 @@
 
 ### 5.1 初始化与配置
 
-- [ ] `P0` `window.dt.set({ pid })` 后，`pid` 写入 `common.pid`。
+- [ ] `P0` `window.dt.set({ pid, reportUrl })` 后，`pid` 写入 `common.pid`，`reportUrl` 不写入 `common`。
 - [ ] `P0` 未设置 `pid` 时，调用打点返回错误提示，不发送有效打点。
+- [ ] `P0` 未设置或传入空的 `reportUrl` 时，调用打点返回错误提示，不发送请求。
 - [ ] `P1` `uuid` 为空时仅提示警告，不阻断错误、性能、行为上报。
 - [ ] `P1` `ucid` 为空时仅提示警告，不阻断其他上报。
 - [ ] `P1` `is_test: true` 或旧字段 `test: true` 时，`common.test` 自动写入固定 `TEST_FLAG`。
@@ -115,7 +116,7 @@
 - [ ] `P0` `detail`、`extra` 非对象时返回错误提示。
 - [ ] `P1` `rule.js` 中 code `1~5`、`8` 的必填字段与字段转换正确。
 - [ ] `P1` `detailAdapter()` 将 `error_name` 转换为 `error_no`，保留 `http_code`、`during_ms`、`url`、`request_size_b`、`response_size_b`。
-- [ ] `P1` 发送方式为 `new Image().src = <feeTarget>?d=<encoded json>`。
+- [ ] `P1` 发送方式为 `new Image().src = <reportUrl>?d=<encoded json>`，`reportUrl` 已有查询参数时使用 `&d=`。
 - [ ] `P1` URL 参数 `d` 解码后包含 `type`、`code`、`detail`、`extra`、`common`。
 - [ ] `P1` `common.timestamp`、`runtime_version`、`sdk_version`、`page_type` 存在且格式正确。
 
@@ -322,7 +323,7 @@
 
 - [ ] `P0` 初始化数据库并写入一个项目，项目 ID 与 SDK `pid` 匹配。
 - [ ] `P0` 启动 Server 与 Client，使用默认或测试账号登录。
-- [ ] `P0` 打开测试页面加载 SDK，执行 `window.dt.set({ pid, uuid, ucid, is_test: false })`。
+- [ ] `P0` 打开测试页面加载 SDK，执行 `window.dt.set({ pid, reportUrl, uuid, ucid, is_test: false })`。
 - [ ] `P0` 触发一次 `window.dt.notify()`，确认 Nginx/Kafka 原始日志出现。
 - [ ] `P0` 执行 `SaveLog:*`，确认本地 JSON 日志出现标准化记录。
 - [ ] `P0` 执行 `Parse:Monitor <start> <end>`，确认 monitor 表新增记录。

@@ -1849,72 +1849,86 @@ pm2 logs fee-task-manager --lines 80
 
 ## 十五、业务页面接入 SDK 的注意事项
 
-当前 SDK 上报地址硬编码在：
-
-```text
-sdk/src/index.js
-```
-
-当前值是：
-
-```js
-const feeTarget = 'http://test.com/dig'
-```
-
-测试环境有两个选择。
-
-### 15.1 临时 hosts 方式
-
-在你自己的电脑 hosts 中添加：
-
-```text
-8.138.93.199 test.com
-```
-
-这样未改 SDK 时，请求 `http://test.com/dig` 会进入这台 ECS。Nginx 配置中已经包含：
-
-```nginx
-server_name 8.138.93.199 test.com;
-```
-
-这种方式适合临时联调，不适合长期使用。
-
-### 15.2 修改 SDK 上报地址并重新构建
-
-把 `sdk/src/index.js` 改成：
-
-```js
-const feeTarget = 'http://8.138.93.199/dig'
-```
-
-然后构建：
-
-```bash
-cd /opt/fee-pro/sdk
-npm install --no-audit
-npm run build
-```
-
-业务页面接入时，`pid` 要使用后台项目的 `project_name`，模板项目是：
+SDK 不再内置固定上报地址。业务页面必须通过 `dt.set()` 配置 `reportUrl`，它应指向本环境 Nginx 的 `/dig`：
 
 ```js
 window.dt.set({
   pid: 'template',
+  reportUrl: 'http://8.138.93.199/dig',
   uuid: 'test-device-id',
   ucid: 'test-user-id',
   is_test: false
 })
 ```
 
+其中：
+
+- `pid` 必须使用后台项目的 `project_name`，模板项目是 `template`。
+- `reportUrl` 是 SDK 传输配置，不会写入上报 JSON 的 `common` 字段。
+- 未配置或传入空的 `reportUrl` 时，SDK 会输出“请设置上报地址[reportUrl]”并停止上报。
+- `is_test` 只控制测试数据标记，不负责切换上报地址。
+
 如果设置 `is_test: true`，日志会进入测试日志目录，只供调试查看，不参与正常统计。
 
-正式一点的做法是给测试环境绑定域名，例如 `fee-test.example.com`，然后把 SDK 上报地址改为：
+### 15.1 临时使用 ECS IP
+
+尚未绑定域名时，可以在业务初始化配置中暂时使用：
 
 ```js
-const feeTarget = 'http://fee-test.example.com/dig'
+window.dt.set({
+  pid: 'template',
+  reportUrl: 'http://8.138.93.199/dig'
+})
 ```
 
-再配 HTTPS。
+这种方式只适合 HTTP 测试页面临时联调。HTTPS 业务页面向 HTTP IP 发送图片请求可能被浏览器按混合内容阻止。
+
+### 15.2 使用测试域名和 HTTPS（推荐）
+
+给测试环境绑定域名，例如 `fee-test.example.com`，配置证书和 Nginx 后，由业务应用传入：
+
+```js
+window.dt.set({
+  pid: 'template',
+  reportUrl: 'https://fee-test.example.com/dig'
+})
+```
+
+开发、测试和正式环境可以使用业务应用自身的环境变量或运行时配置注入不同地址：
+
+```js
+window.dt.set({
+  pid: 'template',
+  reportUrl: window.__APP_CONFIG__.FEE_REPORT_URL
+})
+```
+
+这样同一份 SDK 构建产物可以用于多个环境，不需要为了切换采集地址修改 `sdk/src/index.js` 或重新发布 SDK。
+
+### 15.3 临时 hosts 方式
+
+如果需要继续使用 `test.com` 做本机联调，可在自己电脑的 hosts 中添加：
+
+```text
+8.138.93.199 test.com
+```
+
+并显式配置：
+
+```js
+window.dt.set({
+  pid: 'template',
+  reportUrl: 'http://test.com/dig'
+})
+```
+
+Nginx 配置中已经包含：
+
+```nginx
+server_name 8.138.93.199 test.com;
+```
+
+hosts 只影响修改过的电脑，不影响其他测试人员或真实用户，因此不适合长期部署。
 
 ## 十六、日常运维命令
 
@@ -2261,7 +2275,7 @@ scp fee-pro-src.tar.gz fee@8.138.93.199:/opt/
 
 1. 绑定域名，例如 `fee-test.example.com`。
 2. 使用 Certbot 或阿里云证书配置 HTTPS。
-3. 修改 SDK 上报地址为测试域名。
+3. 在业务应用运行时配置中把 `reportUrl` 设置为测试域名。
 4. 移除或修改默认账号 `test@qq.com/admin`。
 5. 把数据库密码、报警地址等敏感配置改为环境变量或部署平台注入。
 6. 数据量上来后，再评估 Kafka、独立数据库、独立 Redis 和日志采集链路。

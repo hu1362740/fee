@@ -1547,10 +1547,12 @@ sudo systemctl reload nginx
 确认 Nginx 本机能返回前端：
 
 ```bash
-curl -I http://127.0.0.1/
+curl -I -H 'Host: 8.138.93.199' http://127.0.0.1/
 ```
 
 预期返回 `HTTP/1.1 200 OK` 或其他 2xx/3xx 状态。如果返回 404、403 或 502，先看 Nginx 错误日志：
+
+这里访问 `127.0.0.1` 是为了从 ECS 本机连接 Nginx，同时显式传入 `Host: 8.138.93.199`，让请求匹配本文 `server_name` 对应的 fee-pro 站点。如果省略 `Host`，安装了多个 Nginx 站点时，请求可能落到默认站点并返回 404。
 
 ```bash
 sudo tail -n 80 /var/log/nginx/fee-error.log
@@ -1744,7 +1746,7 @@ TEST_MINUTE=$(date '+%Y/%m/%d/%H/%M')
 TEST_LOG_FILE="/var/log/nginx/fee-minute/${TEST_MINUTE}.log"
 
 D=$(node -e "const log={type:'error',code:8,detail:{error_no:'ECS_DEPLOY_TEST',url:'http://8.138.93.199/deploy-test',http_code:0,during_ms:0,request_size_b:0,response_size_b:0},extra:{desc:'manual deploy test'},common:{pid:'template',uuid:'deploy-test-uuid',ucid:'deploy-user',timestamp:Date.now(),version:'1.0.0'}};process.stdout.write(encodeURIComponent(JSON.stringify(log)))")
-curl -I "http://127.0.0.1/dig?d=${D}"
+curl -I -H 'Host: 8.138.93.199' "http://127.0.0.1/dig?d=${D}"
 echo "$TEST_LOG_FILE"
 sudo tail -n 1 "$TEST_LOG_FILE"
 sudo -u fee test -r "$TEST_LOG_FILE" && echo 'fee log readable'
@@ -2265,4 +2267,3 @@ scp fee-pro-src.tar.gz fee@8.138.93.199:/opt/
 - `SaveLog:Nginx` 能生成 `server/log/kafka/json` 文件。
 - `Parse:Monitor` 能把手工打点写入 `t_o_monitor_1_YYYYMM`。
 - `fee-app` 和 `fee-task-manager` 在 PM2 中稳定运行。
-

@@ -65,6 +65,17 @@ async function main () {
   try {
     await request(port, 'POST', '/api/clear')
 
+    const configRes = await request(port, 'GET', '/api/config')
+    const publicConfig = JSON.parse(configRes.body)
+    if (configRes.statusCode !== 200 || publicConfig.reportUrl !== config.reportUrl) {
+      throw new Error('配置接口未返回正确的 reportUrl')
+    }
+
+    const runtimeConfigRes = await request(port, 'GET', '/runtime-config.js')
+    if (runtimeConfigRes.statusCode !== 200 || !runtimeConfigRes.body.includes(JSON.stringify(config.reportUrl))) {
+      throw new Error('运行时配置脚本未注入正确的 reportUrl')
+    }
+
     const records = [
       makeRecord('error', 8, {
         error_no: 'SmokeTest主动错误',

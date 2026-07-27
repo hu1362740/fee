@@ -2,13 +2,16 @@
 
 `example` 是一个独立的业务方演示子项目，用来模拟真实业务系统接入主项目 `sdk/`，并演示数据从业务页面产生、经本机 Nginx 接收、由 `server` 解析入库、最终在 `client` 展示的完整链路。
 
-本子项目不修改 SDK 源码，也不改写 SDK 打点地址。当前主项目 SDK 在 `sdk/src/index.js` 中固定：
+本子项目不修改 SDK 源码，而是像真实业务方一样在初始化时显式配置 SDK 上报地址：
 
 ```js
-const feeTarget = 'http://test.com/dig'
+window.dt.set({
+  pid: 'test_1',
+  reportUrl: 'http://test.com/dig'
+})
 ```
 
-本机已经通过 Nginx 将 `http://test.com/dig` 接到日志入口，因此 example 页面会直接使用这个真实打点目标。
+默认地址来自 `example/config/default.json`，本机已经通过 Nginx 将 `http://test.com/dig` 接到日志入口。
 
 ---
 
@@ -20,7 +23,8 @@ const feeTarget = 'http://test.com/dig'
 example 页面
   -> 直接引入主项目 SDK 构建产物
   -> 调用 window.dt 打点 API
-  -> SDK 通过 Image 请求发送到 http://test.com/dig
+  -> 业务方通过 dt.set({ reportUrl }) 指定 http://test.com/dig
+  -> SDK 通过 Image 请求发送打点数据
   -> 本机 Nginx 接收并写 access log
   -> server SaveLog:Nginx 转换为 server/log/kafka/json
   -> server Parse/Summary 命令解析、汇总并入库
@@ -34,7 +38,7 @@ example 页面
 ```text
 example/
 ├── config/
-│   └── default.json              # 示例项目配置：端口、项目 pid、项目 id 等
+│   └── default.json              # 示例项目配置：端口、项目 pid、上报地址等
 ├── public/
 │   └── index.html                # 示例业务页面
 ├── scripts/
@@ -52,7 +56,7 @@ example/
 说明：
 
 - 页面不再包含 `sdk-bridge.js`。
-- SDK 请求不会发到 example 服务的 `/dig`，而是发到 SDK 内置的 `http://test.com/dig`。
+- SDK 请求不会发到 example 服务的 `/dig`，而是发到业务方配置的 `reportUrl`，默认是 `http://test.com/dig`。
 - `scripts/server.js` 中的 `/dig` 仅保留给 `npm test` 做收集器冒烟测试，正常页面演示不使用它。
 
 ---
@@ -90,7 +94,7 @@ npm run build
 
 - example 必要文件是否存在。
 - 主项目 SDK 浏览器构建产物是否存在。
-- 当前 `projectPid`、`projectId` 配置是否可读。
+- 当前 `projectPid`、`projectId`、`reportUrl` 配置是否可读。
 
 如果缺少 SDK 构建产物，先执行：
 
@@ -115,18 +119,28 @@ example/config/default.json
 |------|------|
 | `port` | example 本地页面服务端口，默认 `8090` |
 | `projectId` | server 数据库中的项目 ID，默认 `1` |
-| `projectPid` | SDK 上报的项目标识，默认 `template` |
+| `projectPid` | SDK 上报的项目标识，默认 `test_1` |
+| `reportUrl` | 业务方传给 `dt.set()` 的 SDK 上报地址，默认 `http://test.com/dig` |
 | `collectorPath` | example 内置测试收集接口，默认 `/dig`，仅用于 `npm test` |
 | `writeServerKafkaLog` | `npm test` 直接打 `/dig` 时是否写入 server kafka 日志，默认 `true` |
 | `serverKafkaLogRoot` | 从 example 到主项目 Kafka 日志目录的相对路径 |
 
-默认 `projectPid` 使用 `template`，因为主项目 `Utils:TemplateSQL` 会创建：
+当前 `default.json` 使用 `test_1`，需要保证它已存在于 `t_o_project.project_name`。如果只初始化了主项目模板数据，可以把 `projectPid` 改成 `template`；`Utils:TemplateSQL` 会创建：
 
 ```sql
 REPLACE INTO t_o_project (..., id, project_name, ...) VALUES (..., 1, 'template', ...);
 ```
 
 如果改成其他 pid，需要保证 `server` 数据库中的 `t_o_project.project_name` 已注册，否则 `SaveLog:Nginx` 会把日志判定为未注册项目。
+
+启动时可以使用环境变量覆盖上报地址，无需修改 SDK：
+
+```powershell
+$env:EXAMPLE_REPORT_URL='https://fee-test.example.com/dig'
+npm start
+```
+
+example 服务会通过 `/runtime-config.js` 在 SDK 加载前注入 `projectPid` 和 `reportUrl`，再由 `src/main.js` 调用 `dt.set()`。
 
 ---
 
@@ -136,7 +150,8 @@ REPLACE INTO t_o_project (..., id, project_name, ...) VALUES (..., 1, 'template'
 
 ```js
 window.dt.set({
-  pid: 'template',
+  pid: 'test_1',
+  reportUrl: 'http://test.com/dig',
   uuid: 'example-device-...',
   ucid: 'example-user-...',
   is_test: false,
@@ -170,7 +185,7 @@ window.dt.set({
 
 ### 7.1 准备本机 Nginx
 
-确保本机访问：
+默认配置下，确保本机访问：
 
 ```text
 http://test.com/dig
@@ -224,7 +239,7 @@ http://127.0.0.1:8090
 
 在页面中点击各类演示按钮，并提交表单。
 
-浏览器 Network 面板过滤 `dig`，应能看到请求发送到：
+浏览器 Network 面板过滤 `dig`，默认应能看到请求发送到：
 
 ```text
 http://test.com/dig?d=...
@@ -244,7 +259,7 @@ D:/phpstudy_pro/Extensions/Nginx1.15.11/logs/access.log
 如果 Nginx 日志中没有数据，优先检查：
 
 - `test.com` 是否解析到本机。
-- 页面 Network 是否确实发出了 `http://test.com/dig` 请求。
+- 页面 Network 是否确实发出了 `reportUrl` 对应的请求；默认是 `http://test.com/dig`。
 - Nginx 是否启动。
 - `/dig` location 是否记录 access log。
 
@@ -335,7 +350,7 @@ npm test
 
 - `npm test` 是 example 自身收集器测试。
 - 正常页面演示不走 example 的 `/dig`。
-- 正常页面演示走 SDK 内置 `http://test.com/dig` 和本机 Nginx。
+- 正常页面演示走业务方配置的 `reportUrl`；默认是 `http://test.com/dig` 和本机 Nginx。
 
 ---
 
@@ -361,7 +376,7 @@ npm run build
 
 这是正常的。
 
-页面打点走 `http://test.com/dig`，不会进入 example 的 `/dig`。请看浏览器 Network 和 Nginx access log。
+页面打点走 `reportUrl`，默认是 `http://test.com/dig`，不会进入 example 的 `/dig`。请看浏览器 Network 和 Nginx access log。
 
 ### 9.3 Nginx 有日志，但 server 解析后 client 看不到
 
@@ -410,7 +425,7 @@ npm install
 npm run build
 npm run fee Utils:TemplateSQL
 
-# 3. 确认本机 Nginx 能接收 http://test.com/dig 并写 access log
+# 3. 确认 reportUrl 对应的 Nginx 能接收 /dig 并写 access log
 
 # 4. 启动 example
 cd ../example
@@ -439,8 +454,8 @@ npm run dev
 ## 十一、设计边界
 
 - example 不修改主项目 SDK 源码。
-- example 不改写 SDK 内置打点地址。
+- example 通过 `dt.set({ reportUrl })` 显式提供业务方上报地址。
 - example 页面不再使用 `sdk-bridge.js`。
-- example 依赖本机 Nginx 接收 `http://test.com/dig`。
+- example 默认依赖本机 Nginx 接收 `http://test.com/dig`，也可通过 `EXAMPLE_REPORT_URL` 切换环境。
 - example 的 `/dig` 仅作为冒烟测试入口保留。
 - `info` 类型用于证明 SDK 扩展类型可上报；主项目 client 是否展示取决于是否实现对应后端解析和前端页面。

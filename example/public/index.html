@@ -51,7 +51,7 @@
     <section class="panel">
       <div class="panel-title">
         <h2>真实链路检查</h2>
-        <p>example 页面不会改写 SDK 目标地址，打点请求会直接发送到 SDK 内置的 `http://test.com/dig`。</p>
+        <p>example 通过业务方初始化配置传入 SDK 上报地址，默认发送到本机 Nginx 的 `http://test.com/dig`。</p>
       </div>
       <div class="summary-grid flow-grid">
         <div>
@@ -64,7 +64,7 @@
         </div>
         <div>
           <span class="summary-label">打点目标</span>
-          <strong>test.com</strong>
+          <strong id="reportUrl">-</strong>
         </div>
       </div>
       <ol class="flow-list compact">
@@ -82,7 +82,7 @@
       </div>
       <ol class="flow-list">
         <li>业务页面调用 `window.dt` 的错误、性能、行为、信息接口。</li>
-        <li>SDK 使用内置目标地址 `http://test.com/dig` 发送 1px Image 请求。</li>
+        <li>SDK 使用业务方通过 `dt.set({ reportUrl })` 配置的地址发送 1px Image 请求。</li>
         <li>本机 Nginx 接收 `/dig?d=...` 并写入 access log。</li>
         <li>`server` 通过 `SaveLog:Nginx` 将 access log 转为 `server/log/kafka/json`。</li>
         <li>运行 `server` 的 `Parse:*` / `Summary:*` 命令后，client 管理后台即可查看对应图表。</li>
@@ -90,7 +90,8 @@
     </section>
   </main>
 
-  <!-- 直接加载主项目 SDK，不改写 SDK 内置的 http://test.com/dig 打点目标。 -->
+  <!-- 先加载业务方运行时配置，再加载主项目 SDK 和业务初始化代码。 -->
+  <script src="/runtime-config.js"></script>
   <script src="/sdk/index.js"></script>
   <script src="/src/main.js"></script>
 </body>

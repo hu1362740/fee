@@ -56,7 +56,7 @@
    * 关键点：
    * - window.dt 由 /sdk/index.js 提供。
    * - pid 必须等于 server 数据库 t_o_project.project_name。
-   * - 本示例默认 pid=template，对应 Utils:TemplateSQL 创建的模板项目。
+   * - reportUrl 由业务方配置，决定 SDK 把数据发到哪个 Nginx /dig。
    */
   function initSdk (config) {
     if (!window.dt) {
@@ -67,6 +67,7 @@
     // 初始化 SDK 公共字段。pid 必须与 server 数据库 t_o_project.project_name 对应。
     window.dt.set({
       pid: config.projectPid,
+      reportUrl: config.reportUrl,
       uuid: state.uuid,
       ucid: state.ucid,
       is_test: false,
@@ -97,6 +98,7 @@
     setStatus('SDK 已初始化，pid=' + config.projectPid)
     qs('#sdkState').textContent = '已初始化'
     qs('#projectPid').textContent = config.projectPid
+    qs('#reportUrl').textContent = config.reportUrl
   }
 
   /**
@@ -442,7 +444,7 @@
    * example 页面启动入口。
    *
    * 执行顺序：
-   * 1. 先同步设置基础配置，确保 SDK 的 window.onload 事件触发时 pid 已有值。
+   * 1. 使用 /runtime-config.js 注入的 pid 和 reportUrl 同步设置基础配置。
    * 2. 请求 /api/config，读取完整 example 配置。
    * 3. 用完整配置更新 SDK。
    * 4. 绑定页面按钮/表单事件。
@@ -450,10 +452,13 @@
    * 6. 自动发送一次页面浏览行为打点。
    */
   function boot () {
-    // 先同步设置基础配置，避免 SDK 的 window.onload 触发时 pid 为空导致报错
+    var bootstrapConfig = window.__FEE_EXAMPLE_CONFIG__ || {}
+
+    // 先同步设置基础配置，避免 SDK 的 window.onload 触发时关键配置仍为空
     if (window.dt) {
       window.dt.set({
-        pid: 'test_1',
+        pid: bootstrapConfig.projectPid,
+        reportUrl: bootstrapConfig.reportUrl,
         uuid: state.uuid,
         ucid: state.ucid,
         is_test: false,
@@ -480,7 +485,7 @@
           return 'example:' + location.pathname
         }
       })
-      console.log('SDK 基础配置已设置，pid=test_1')
+      console.log('SDK 基础配置已设置', bootstrapConfig)
     }
 
     // 再异步获取完整配置并更新

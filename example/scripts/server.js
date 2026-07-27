@@ -21,6 +21,7 @@ function loadConfig () {
     host: process.env.EXAMPLE_HOST || rawConfig.host,
     projectPid: process.env.EXAMPLE_PROJECT_PID || rawConfig.projectPid,
     projectId: Number(process.env.EXAMPLE_PROJECT_ID || rawConfig.projectId),
+    reportUrl: process.env.EXAMPLE_REPORT_URL || rawConfig.reportUrl,
     writeServerKafkaLog: process.env.EXAMPLE_WRITE_SERVER_KAFKA_LOG
       ? process.env.EXAMPLE_WRITE_SERVER_KAFKA_LOG === '1'
       : rawConfig.writeServerKafkaLog
@@ -308,11 +309,25 @@ function createExampleServer (config = loadConfig()) {
         projectId: config.projectId,
         projectPid: config.projectPid,
         projectName: config.projectName,
+        reportUrl: config.reportUrl,
         collectorPath: config.collectorPath,
         writeServerKafkaLog: config.writeServerKafkaLog,
         defaultUser: config.defaultUser,
         sdkBundle: sdkBundle ? path.relative(repoRoot, sdkBundle) : ''
       })
+      return
+    }
+
+    if (pathname === '/runtime-config.js') {
+      const body = `window.__FEE_EXAMPLE_CONFIG__ = ${JSON.stringify({
+        projectPid: config.projectPid,
+        reportUrl: config.reportUrl
+      })}`
+      res.writeHead(200, {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-store'
+      })
+      res.end(body)
       return
     }
 
@@ -387,6 +402,7 @@ function start () {
     console.log(`Fee SDK example is running at http://${config.host}:${config.port}`)
     console.log(`collector: http://${config.host}:${config.port}${config.collectorPath}`)
     console.log(`project pid: ${config.projectPid}, project id: ${config.projectId}`)
+    console.log(`SDK report URL: ${config.reportUrl}`)
   })
 }
 

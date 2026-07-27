@@ -4,6 +4,7 @@
   "projectId": 1,
   "projectPid": "test_1",
   "projectName": "Fee SDK 示例业务方",
+  "reportUrl": "http://test.com/dig",
   "collectorPath": "/dig",
   "writeServerKafkaLog": true,
   "serverKafkaLogRoot": "../server/log/kafka",

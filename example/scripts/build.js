@@ -33,9 +33,14 @@ if (!sdkBundle) {
 }
 
 const config = loadConfig()
+if (typeof config.reportUrl !== 'string' || config.reportUrl.trim() === '') {
+  hasError = true
+  console.error('[invalid] reportUrl 必须是非空字符串')
+}
 console.log('example build check')
 console.log(`projectPid: ${config.projectPid}`)
 console.log(`projectId: ${config.projectId}`)
+console.log(`reportUrl: ${config.reportUrl || '-'}`)
 console.log(`sdkBundle: ${sdkBundle || '-'}`)
 
 if (hasError) {

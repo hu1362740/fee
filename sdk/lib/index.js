@@ -9,16 +9,13 @@ var _rule = _interopRequireDefault(require("./rule"));
 var _config = _interopRequireDefault(require("../config"));
 var _lodashEs = require("lodash-es");
 function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
-// 将loadsh的方法集中到_中
+// 将 lodash 的方法集中到_中，方便统一调用
 let _ = {};
 _.get = _lodashEs.get;
 _.has = _lodashEs.has;
 _.clone = _lodashEs.clone;
 _.isFunction = _lodashEs.isFunction;
 _.merge = _lodashEs.merge;
-
-// const feeTarget = 'https://test.com/dig' // 打点服务器，或Nginx地址
-const feeTarget = 'http://test.com/dig'; // 打点服务器，或Nginx地址
 
 // pid string 工程id:platfe_saas
 // uuid string 用户信息
@@ -28,12 +25,14 @@ const feeTarget = 'http://test.com/dig'; // 打点服务器，或Nginx地址
 
 // 测试标记符
 const TEST_FLAG = 'b47ca710747e96f1c523ebab8022c19e9abaa56b';
+
+// 日志类型常量
 const LOG_TYPE_ERROR = 'error'; // 错误日志
 const LOG_TYPE_PRODUCT = 'product'; // 产品指标
 const LOG_TYPE_INFO = 'info'; // 尚未使用
 const LOG_TYPE_PERFORMANCE = 'perf'; // 性能指标
 
-// 定义JS_TRACKER错误类型码
+// 定义 JS_TRACKER 错误类型码映射
 const JS_TRACKER_ERROR_CONSTANT_MAP = {
   1: 'ERROR_RUNTIME',
   2: 'ERROR_SCRIPT',
@@ -44,6 +43,8 @@ const JS_TRACKER_ERROR_CONSTANT_MAP = {
   7: 'ERROR_CONSOLE',
   8: 'ERROR_TRY_CATCH'
 };
+
+// 定义 JS_TRACKER 错误展示名称映射
 const JS_TRACKER_ERROR_DISPLAY_MAP = {
   1: 'JS_RUNTIME_ERROR',
   2: 'SCRIPT_LOAD_ERROR',
@@ -55,7 +56,7 @@ const JS_TRACKER_ERROR_DISPLAY_MAP = {
   8: 'TRY_CATCH_ERROR'
 };
 
-// 默认配置
+// 默认配置项
 const DEFAULT_CONFIG = {
   pid: '',
   // [必填]项目id, 由灯塔项目组统一分配
@@ -115,16 +116,40 @@ const DEFAULT_CONFIG = {
     return `${location.host}${location.pathname}`;
   }
 };
+
+// SDK 传输配置不写入打点数据，由业务方在 dt.set() 中单独配置
+const DEFAULT_TRANSPORT_CONFIG = {
+  reportUrl: ''
+};
+
+// 当前生效的配置
 let commonConfig = _.clone(DEFAULT_CONFIG);
+let transportConfig = _.clone(DEFAULT_TRANSPORT_CONFIG);
+
+/**
+ * 调试日志打印，仅在测试模式下生效
+ */
 function debugLogger() {
-  // 只有在测试时才打印log
   if (commonConfig.is_test) {
-    console.info(...arguments);
+    console.info('dt:', ...arguments);
   }
 }
+
+/**
+ * 控制台红色日志打印
+ */
 const clog = text => {
   console.log(`%c ${text}`, 'color:red');
 };
+
+/**
+ * 校验 log 参数合法性
+ * @param {String} type 日志类型
+ * @param {Number} code 错误码
+ * @param {Object} detail 消费数据
+ * @param {Object} extra 展示数据
+ * @returns {String} 错误消息，为空表示校验通过
+ */
 const validLog = function () {
   let type = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
   let code = arguments.length > 1 ? arguments[1] : undefined;
@@ -134,6 +159,12 @@ const validLog = function () {
   if (!pid) {
     return '请设置工程ID[pid]';
   }
+  const reportUrl = _.get(transportConfig, ['reportUrl'], '');
+  if (typeof reportUrl !== 'string' || reportUrl.trim() === '') {
+    return '请设置上报地址[reportUrl]';
+  }
+
+  // 校验 code 范围
   if (type === 'error') {
     if (code < 0 || code > 9999) {
       return 'type:error的log code 应该在1～9999之间';
@@ -148,16 +179,15 @@ const validLog = function () {
     }
   }
 
-  // 字端段类型校验
+  // 字段类型校验
   if (typeof detail !== 'object') {
     return 'second argument detail required object';
   }
-  // 字端段类型校验
   if (typeof extra !== 'object') {
     return 'third argument extra required object';
   }
 
-  // 字段校验
+  // 根据 rule 校验必填字段
   const ruleItem = _rule.default[code];
   if (ruleItem) {
     // 消费字段必填
@@ -176,6 +206,13 @@ const validLog = function () {
   }
   return '';
 };
+
+/**
+ * 根据 rule 配置转换 detail 字段名
+ * @param {Number} code 错误码
+ * @param {Object} detail 原始数据
+ * @returns {Object} 转换后的数据
+ */
 const detailAdapter = function (code) {
   let detail = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
   const dbDetail = {
@@ -211,11 +248,11 @@ const detailAdapter = function (code) {
 };
 
 /**
- *
- * @param {类型} type
- * @param {code码} code
- * @param {消费数据} detail
- * @param {展示数据} extra
+ * 核心打点函数
+ * @param {String} type 类型
+ * @param {Number} code code 码
+ * @param {Object} detail 消费数据
+ * @param {Object} extra 展示数据
  */
 const log = function () {
   let type = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
@@ -228,7 +265,7 @@ const log = function () {
     return errorMsg;
   }
 
-  // 调用自定义函数, 计算pageType
+  // 获取页面类型解析函数
   let getPageTypeFunc = _.get(commonConfig, ['getPageType'], _.get(DEFAULT_CONFIG, ['getPageType']));
   let location = window.location;
   let pageType = location.href;
@@ -241,6 +278,8 @@ const log = function () {
     });
     pageType = `${location.host}${location.pathname}`;
   }
+
+  // 组装日志信息
   const logInfo = {
     type,
     code,
@@ -254,28 +293,50 @@ const log = function () {
       page_type: pageType
     }
   };
-  // 图片打点
+  // 通过 Image 发送打点数据
+  const reportUrl = _.get(transportConfig, ['reportUrl']).trim();
+  const querySeparator = reportUrl.indexOf('?') === -1 ? '?' : '&';
   const img = new window.Image();
-  img.src = `${feeTarget}?d=${encodeURIComponent(JSON.stringify(logInfo))}`;
+  img.src = `${reportUrl}${querySeparator}d=${encodeURIComponent(JSON.stringify(logInfo))}`;
 };
+
+/**
+ * 设置配置项
+ * @param {Object} customerConfig 用户配置
+ * @param {Boolean} isOverwrite 是否覆盖原有配置
+ */
 log.set = function () {
   let customerConfig = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
   let isOverwrite = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
-  // 覆盖模式
+  const commonCustomerConfig = {
+    ...customerConfig
+  };
+  const hasReportUrl = _.has(commonCustomerConfig, ['reportUrl']);
+  const customerReportUrl = _.get(commonCustomerConfig, ['reportUrl']);
+  delete commonCustomerConfig.reportUrl;
   if (isOverwrite) {
     commonConfig = {
-      ...customerConfig
+      ...commonCustomerConfig
     };
+    transportConfig = _.clone(DEFAULT_TRANSPORT_CONFIG);
   } else {
     // lodash内置函数, 相当于递归版assign
-    commonConfig = _.merge(commonConfig, customerConfig);
+    commonConfig = _.merge(commonConfig, commonCustomerConfig);
   }
+  if (hasReportUrl) {
+    transportConfig.reportUrl = customerReportUrl;
+  }
+  const reportUrl = _.get(transportConfig, ['reportUrl'], '');
+  if (typeof reportUrl !== 'string' || reportUrl.trim() === '') {
+    clog('请设置上报地址[reportUrl]');
+  }
+
   // 检测是否为测试数据
   const isTestFlagOn = _.get(commonConfig, ['is_test'], _.get(DEFAULT_CONFIG, ['is_test']));
-  const isOldTestFlagOn = _.get(commonConfig, ['test'], false); // 兼容旧配置项
+  const isOldTestFlagOn = _.get(commonConfig, ['test'], false);
   const isTest = isTestFlagOn || isOldTestFlagOn;
 
-  // 检测配置项
+  // 校验关键配置项
   const uuid = _.get(commonConfig, ['uuid'], '');
   if (uuid === '') {
     debugLogger('警告: 未设置uuid(设备唯一标识), 无法统计设备分布数等信息');
@@ -300,15 +361,27 @@ log.set = function () {
     debugLogger('更新后配置为:', commonConfig);
   }
 };
+
+// 初始化 js-tracker 监控
+// 【调用链路说明】：
+// 1. 此处将 report 函数作为回调配置传递给 jstracker.init()
+// 2. jstracker 内部会将此函数保存，并在捕获到错误时触发调用
+// 3. 具体触发逻辑见 js-tracker/index.js 中的 __config 和 handleError 函数
 _jsTracker.default.init({
   concat: false,
+  /**
+   * 错误上报回调函数
+   * 当 jstracker 捕获到错误列表时，会自动调用此函数
+   * @param {Array} errorLogList - 捕获到的错误日志列表
+   */
   report: function () {
     let errorLogList = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+    // 检查是否开启 JS 错误监控
     const isJsErrorFlagOn = _.get(commonConfig, ['record', 'js_error'], _.get(DEFAULT_CONFIG, ['record', 'js_error']));
     const isOldJsErrorFlagOn = _.get(commonConfig, ['jserror'], false);
     const needRecordJsError = isJsErrorFlagOn || isOldJsErrorFlagOn;
     if (needRecordJsError === false) {
-      debugLogger(`config.record.js_error为false, 跳过页面报错打点, 页面报错内容为 =>`, errorLogList);
+      debugLogger(`config.record.js_error为false, 跳过页面报错打点，页面报错内容为 =>`, errorLogList);
       return;
     }
     for (let errorLog of errorLogList) {
@@ -318,22 +391,21 @@ _jsTracker.default.init({
         stack
       } = errorLog;
 
-      // 检测该errorType是否需要记录
+      // 检测该 errorType 是否需要记录
       let strErrorType = _.get(JS_TRACKER_ERROR_CONSTANT_MAP, type, '');
       let isErrorTypeNeedRecord = _.get(commonConfig, ['record', 'js_error_report_config', strErrorType], _.get(DEFAULT_CONFIG, ['record', 'js_error_report_config', strErrorType]));
       if (isErrorTypeNeedRecord === false) {
-        // 主动配置了忽略该错误, 自动返回
-        debugLogger(`config.record.js_error_report_config.${strErrorType}值为false, 跳过类别为${strErrorType}的页面报错打点, 错误信息=>`, errorLog);
+        debugLogger(`config.record.js_error_report_config.${strErrorType}值为 false, 跳过类别为${strErrorType}的页面报错打点，错误信息=>`, errorLog);
         continue;
       }
 
-      // 调用自定义函数, 检测是否需要上报错误
+      // 调用自定义函数，检测是否需要上报错误
       let customerErrorCheckFunc = _.get(commonConfig, ['record', 'js_error_report_config', 'checkErrrorNeedReport'], _.get(DEFAULT_CONFIG, ['record', 'js_error_report_config', 'checkErrrorNeedReport']));
       let isNeedReport = false;
       try {
         isNeedReport = customerErrorCheckFunc(desc, stack);
       } catch (e) {
-        debugLogger(`config.record.js_error_report_config.checkErrrorNeedReport执行时发生异常, 请注意, 页面报错信息为=>`, {
+        debugLogger(`config.record.js_error_report_config.checkErrrorNeedReport 执行时发生异常，请注意，页面报错信息为=>`, {
           e,
           desc,
           stack
@@ -341,7 +413,7 @@ _jsTracker.default.init({
         isNeedReport = true;
       }
       if (isNeedReport === false) {
-        debugLogger(`config.record.js_error_report_config.checkErrrorNeedReport返回值为false, 跳过此类错误, 页面报错信息为=>`, {
+        debugLogger(`config.record.js_error_report_config.checkErrrorNeedReport 返回值为 false, 跳过此类错误，页面报错信息为=>`, {
           desc,
           stack
         });
@@ -349,7 +421,7 @@ _jsTracker.default.init({
       }
       let errorName = '页面报错_' + JS_TRACKER_ERROR_DISPLAY_MAP[type];
       let location = window.location;
-      debugLogger('[自动]捕捉到页面错误, 发送打点数据, 上报内容 => ', {
+      debugLogger('[自动] 捕捉到页面错误，发送打点数据，上报内容 => ', {
         error_no: errorName,
         url: `${location.host}${location.pathname}`,
         desc,
@@ -365,8 +437,9 @@ _jsTracker.default.init({
     }
   }
 });
+
+// 页面加载完成后上报性能指标
 window.onload = () => {
-  // 检查是否监控性能指标
   const isPerformanceFlagOn = _.get(commonConfig, ['record', 'performance'], _.get(DEFAULT_CONFIG, ['record', 'performance']));
   const isOldPerformanceFlagOn = _.get(commonConfig, ['performance'], false);
   const needRecordPerformance = isPerformanceFlagOn || isOldPerformanceFlagOn;
@@ -376,7 +449,6 @@ window.onload = () => {
   }
   const performance = window.performance;
   if (!performance) {
-    // 当前浏览器不支持
     console.log('你的浏览器不支持 performance 接口');
     return;
   }
@@ -391,13 +463,13 @@ window.onload = () => {
   });
 };
 
-// 用户在线时长统计
-const OFFLINE_MILL = 15 * 60 * 1000; // 15分钟不操作认为不在线
-const SEND_MILL = 5 * 1000; // 每5s打点一次
+// 用户在线时长统计常量
+const OFFLINE_MILL = 15 * 60 * 1000; // 15 分钟不操作认为不在线
+const SEND_MILL = 5 * 1000; // 每 5s 打点一次
 
 let lastTime = Date.now();
+// 监听点击事件，统计在线时长
 window.addEventListener('click', () => {
-  // 检查是否监控用户在线时长
   const isTimeOnPageFlagOn = _.get(commonConfig, ['record', 'time_on_page'], _.get(DEFAULT_CONFIG, ['record', 'time_on_page']));
   const isOldTimeOnPageFlagOn = _.get(commonConfig, ['online'], false);
   const needRecordTimeOnPage = isTimeOnPageFlagOn || isOldTimeOnPageFlagOn;
@@ -438,7 +510,6 @@ function notify() {
   let errorName = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
   let url = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : '';
   let extraInfo = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
-  // 规范请求参数
   let detail = {};
   let extra = {};
   if (!errorName) {
@@ -448,7 +519,7 @@ function notify() {
   detail['error_name'] = '' + errorName;
   detail['url'] = '' + url;
 
-  // 最大不能超过200字
+  // 长度截断保护
   if (detail['error_name'].length > 200) {
     detail['error_name'] = detail['error_name'].slice(0, 200);
     debugLogger('error_name长度不能超过200字符, 自动截断. 截断后为=>', detail['error_name']);
@@ -457,6 +528,8 @@ function notify() {
     detail['url'] = detail['url'].slice(0, 200);
     debugLogger('url长度不能超过200字符, 自动截断. 截断后为=>', detail['error_name']);
   }
+
+  // 整数字段转换
   for (let intKey of ['http_code', 'during_ms', 'request_size_b', 'response_size_b']) {
     if (extraInfo[intKey] !== undefined) {
       let code = parseInt(extraInfo[intKey]);
@@ -514,8 +587,10 @@ function behavior() {
 }
 log.behavior = behavior;
 
-// 注册项目名: dt => downtown
+// 注册全局变量 dt => downtown
 window.dt = log;
+
+// 导出快捷方法
 const Elog = exports.Elog = log.error = (code, detail, extra) => {
   return log('error', code, detail, extra);
 };

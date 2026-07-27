@@ -11,9 +11,6 @@ _.clone = clone
 _.isFunction = isFunction
 _.merge = merge
 
-// const feeTarget = 'https://test.com/dig' // 打点服务器，或Nginx地址
-const feeTarget = 'http://test.com/dig' // 打点服务器，或Nginx地址
-
 // pid string 工程id:platfe_saas
 // uuid string 用户信息
 // ucid string 用户信息
@@ -96,8 +93,14 @@ const DEFAULT_CONFIG = {
   getPageType: (location = window.location) => { return `${location.host}${location.pathname}` }
 }
 
+// SDK 传输配置不写入打点数据，由业务方在 dt.set() 中单独配置
+const DEFAULT_TRANSPORT_CONFIG = {
+  reportUrl: ''
+}
+
 // 当前生效的配置
 let commonConfig = _.clone(DEFAULT_CONFIG)
+let transportConfig = _.clone(DEFAULT_TRANSPORT_CONFIG)
 
 /**
  * 调试日志打印，仅在测试模式下生效
@@ -127,6 +130,11 @@ const validLog = (type = '', code, detail = {}, extra = {}) => {
   const pid = _.get(commonConfig, ['pid'], '')
   if (!pid) {
     return '请设置工程ID[pid]'
+  }
+
+  const reportUrl = _.get(transportConfig, ['reportUrl'], '')
+  if (typeof reportUrl !== 'string' || reportUrl.trim() === '') {
+    return '请设置上报地址[reportUrl]'
   }
 
   // 校验 code 范围
@@ -253,8 +261,10 @@ const log = (type = '', code, detail = {}, extra = {}) => {
     }
   }
   // 通过 Image 发送打点数据
+  const reportUrl = _.get(transportConfig, ['reportUrl']).trim()
+  const querySeparator = reportUrl.indexOf('?') === -1 ? '?' : '&'
   const img = new window.Image()
-  img.src = `${feeTarget}?d=${encodeURIComponent(JSON.stringify(logInfo))}`
+  img.src = `${reportUrl}${querySeparator}d=${encodeURIComponent(JSON.stringify(logInfo))}`
 }
 
 /**
@@ -263,11 +273,26 @@ const log = (type = '', code, detail = {}, extra = {}) => {
  * @param {Boolean} isOverwrite 是否覆盖原有配置
  */
 log.set = (customerConfig = {}, isOverwrite = false) => {
+  const commonCustomerConfig = { ...customerConfig }
+  const hasReportUrl = _.has(commonCustomerConfig, ['reportUrl'])
+  const customerReportUrl = _.get(commonCustomerConfig, ['reportUrl'])
+  delete commonCustomerConfig.reportUrl
+
   if (isOverwrite) {
-    commonConfig = { ...customerConfig }
+    commonConfig = { ...commonCustomerConfig }
+    transportConfig = _.clone(DEFAULT_TRANSPORT_CONFIG)
   } else {
     // lodash内置函数, 相当于递归版assign
-    commonConfig = _.merge(commonConfig, customerConfig)
+    commonConfig = _.merge(commonConfig, commonCustomerConfig)
+  }
+
+  if (hasReportUrl) {
+    transportConfig.reportUrl = customerReportUrl
+  }
+
+  const reportUrl = _.get(transportConfig, ['reportUrl'], '')
+  if (typeof reportUrl !== 'string' || reportUrl.trim() === '') {
+    clog('请设置上报地址[reportUrl]')
   }
 
   // 检测是否为测试数据

@@ -1128,6 +1128,8 @@ su - fee
 
 #### 11.1.2 确认 Nginx worker 用户
 
+这里必须先确认 Nginx worker 的运行用户，因为后续要把分钟日志目录的所有者设置成这个用户。Nginx worker 需要在目录中创建 `mm.log` 文件；用户设置错误时，`/dig` 请求可能因为日志目录无写权限而记录失败。
+
 执行：
 
 ```bash
@@ -1135,7 +1137,53 @@ grep -n '^user' /etc/nginx/nginx.conf
 ps -eo user,group,comm | grep '[n]ginx'
 ```
 
-Ubuntu 通过 apt 安装的 Nginx 通常使用 `www-data`。如果输出是 `nginx` 或其他用户，后续脚本中的 `NGINX_WORKER_USER='www-data'` 要替换成实际用户。
+第一条命令检查配置文件中声明的 worker 用户：
+
+```bash
+grep -n '^user' /etc/nginx/nginx.conf
+```
+
+- `grep` 用于搜索文本；
+- `-n` 同时显示匹配内容的行号；
+- `^user` 只匹配以 `user` 开头的配置行；
+- 典型输出 `1:user www-data;` 表示配置要求 worker 使用 `www-data` 用户。
+
+第二条命令检查当前实际运行的 Nginx 进程：
+
+```bash
+ps -eo user,group,comm | grep '[n]ginx'
+```
+
+- `ps -eo user,group,comm` 列出进程所属用户、所属组和进程名；
+- 管道符 `|` 把结果交给后面的 `grep`；
+- `grep '[n]ginx'` 只保留 Nginx 进程，并避免把 `grep` 命令自身误显示为查询结果。
+
+典型输出：
+
+```text
+root      root      nginx
+www-data  www-data  nginx
+www-data  www-data  nginx
+```
+
+第一行通常是 Nginx master 主进程，以 `root` 运行属于正常现象；后面的 `www-data` 行是实际处理请求的 worker 进程。本节需要使用的是 **worker 用户**，不要把 master 的 `root` 填入目录准备脚本。
+
+两条命令都要执行，因为它们检查的对象不同：
+
+| 命令 | 检查对象 | 作用 |
+| --- | --- | --- |
+| `grep -n '^user' ...` | 磁盘上的静态配置 | 确认 Nginx 配置期望使用哪个 worker 用户 |
+| `ps -eo ...` | 当前运行状态 | 确认配置生效后，实际是哪一个用户在处理请求 |
+
+配置文件可能尚未重新加载，也可能由其他配置或启动方式影响，因此最终应以 `ps` 显示的实际 worker 用户为准，同时检查它为什么与配置不一致。
+
+Ubuntu 通过 apt 安装的 Nginx 通常使用 `www-data`。如果实际 worker 显示为 `nginx` 或其他用户，后续的 `sudo install -d -o www-data ...` 以及脚本中的 `NGINX_WORKER_USER='www-data'` 都要替换成实际用户名。
+
+这两条命令都只读取配置和进程信息，不会修改文件、重启 Nginx，也不会影响当前网站访问。如果第一条没有输出，可以再执行下面这个兼容行首空格的检查：
+
+```bash
+grep -nE '^[[:space:]]*user[[:space:]]' /etc/nginx/nginx.conf
+```
 
 #### 11.1.3 创建目录准备脚本
 

@@ -1373,9 +1373,9 @@ ls -l /opt/fee-pro/client/dist/index.html
 
 ```bash
 sudo tee /etc/nginx/conf.d/fee-pro.conf > /dev/null <<'NGINX'
-map $time_iso8601 $fee_minute_log {
-    "~^(?<fee_year>\d{4})-(?<fee_month>\d{2})-(?<fee_day>\d{2})T(?<fee_hour>\d{2}):(?<fee_minute>\d{2})" /var/log/nginx/fee-minute/$fee_year/$fee_month/$fee_day/$fee_hour/$fee_minute.log;
-    default /var/log/nginx/fee-minute/fallback.log;
+map $time_iso8601 $fee_minute_log_relative_path {
+    "~^(?<fee_year>\d{4})-(?<fee_month>\d{2})-(?<fee_day>\d{2})T(?<fee_hour>\d{2}):(?<fee_minute>\d{2})" $fee_year/$fee_month/$fee_day/$fee_hour/$fee_minute.log;
+    default fallback.log;
 }
 
 log_format fee_main '$time_iso8601\t-\t-\t$remote_addr\t$http_host\t$status\t$request_time\t$request_length\t$body_bytes_sent\t15d04347-be16-b9ab-0029-24e4b6645950\t-\t-\t9689c3ea-5155-2df7-a719-e90d2dedeb2c\t937ba755-116a-18e6-0735-312cba23b00c\t$request_method $server_protocol\t$request_uri\t-\t$http_user_agent\t-\tsample=-&_UC_agent=-&test_device_id=-&-\t-\t-\t-';
@@ -1393,7 +1393,7 @@ server {
 
     location = /dig {
         empty_gif;
-        access_log $fee_minute_log fee_main;
+        access_log /var/log/nginx/fee-minute/$fee_minute_log_relative_path fee_main;
 
         add_header Access-Control-Allow-Origin * always;
         add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
@@ -1473,14 +1473,22 @@ NGINX
 
 #### 11.4.1 动态分钟路径和 `log_format fee_main`
 
-`map` 从 `$time_iso8601` 中提取年月日时分，生成完整日志路径：
+`map` 从 `$time_iso8601` 中提取年月日时分，只生成 `YYYY/MM/DD/HH/mm.log` 相对路径：
 
 ```nginx
-map $time_iso8601 $fee_minute_log {
-    "~^(?<fee_year>\d{4})-(?<fee_month>\d{2})-(?<fee_day>\d{2})T(?<fee_hour>\d{2}):(?<fee_minute>\d{2})" /var/log/nginx/fee-minute/$fee_year/$fee_month/$fee_day/$fee_hour/$fee_minute.log;
-    default /var/log/nginx/fee-minute/fallback.log;
+map $time_iso8601 $fee_minute_log_relative_path {
+    "~^(?<fee_year>\d{4})-(?<fee_month>\d{2})-(?<fee_day>\d{2})T(?<fee_hour>\d{2}):(?<fee_minute>\d{2})" $fee_year/$fee_month/$fee_day/$fee_hour/$fee_minute.log;
+    default fallback.log;
 }
 ```
+
+`access_log` 再把固定的绝对根目录和相对路径组合起来：
+
+```nginx
+access_log /var/log/nginx/fee-minute/$fee_minute_log_relative_path fee_main;
+```
+
+这里不能让 `access_log` 的第一个参数完全由变量组成。否则 Nginx 会把变量计算出的 `/var/log/...` 当作相对路径，并可能在前面添加 Nginx prefix，形成 `/usr/share/nginx//var/log/...` 这样的错误地址。
 
 例如 Nginx 在 `2026-07-23 10:30` 完成的 `/dig` 请求会写入：
 
@@ -1497,7 +1505,7 @@ log_format fee_main '...';
 这行定义了名为 `fee_main` 的 Nginx 日志格式。`/dig` 打点入口会使用它写入 SDK 上报日志：
 
 ```nginx
-access_log $fee_minute_log fee_main;
+access_log /var/log/nginx/fee-minute/$fee_minute_log_relative_path fee_main;
 ```
 
 这个格式使用 `\t` 作为字段分隔符。服务端 `SaveLog:Nginx` 读取日志时会按 Tab 切割字段，并从固定位置取出请求地址、User-Agent 和 IP 等信息，所以不要随意调整字段顺序。尤其是 `$request_uri` 很关键，SDK 上报数据在 `/dig?d=...` 的 `d` 参数里。

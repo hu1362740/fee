@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-开发地址为 `http://localhost:8081`。默认把 `/api` 与 `/project` 代理到 `http://localhost:3000`，可复制 `.env.example` 并通过 `VITE_PROXY_TARGET` 修改后端地址。
+开发地址为 `http://localhost:8081`。默认把 `/api/*` 与 `/project/:id/api/*` 代理到 `http://localhost:3000`；`/project/:id/*` 页面地址仍由 React Router 处理。可复制 `.env.example` 并通过 `VITE_PROXY_TARGET` 修改后端地址。
 
 ## 验证与构建
 

@@ -23,7 +23,8 @@ export default defineConfig(({ mode }) => {
           target: proxyTarget,
           changeOrigin: true
         },
-        '/project': {
+        // `/project/:id/*` 同时也是 React 页面路由，只把其中的 API 请求交给后端。
+        '^/project/[^/]+/api(?:/|$)': {
           target: proxyTarget,
           changeOrigin: true
         }
